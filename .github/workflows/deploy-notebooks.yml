@@ -1,8 +1,5 @@
 name: Deploy Notebooks to Databricks
 on:
-  push:
-    branches: [main]
-    paths: ['databricks/notebooks/**', 'dlt/**']
   workflow_dispatch:
 
 env:

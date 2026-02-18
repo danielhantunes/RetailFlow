@@ -1,8 +1,5 @@
 name: Deploy Databricks Jobs
 on:
-  push:
-    branches: [main]
-    paths: ['databricks/jobs/**']
   workflow_dispatch:
 
 jobs:
