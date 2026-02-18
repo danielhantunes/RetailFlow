@@ -1,0 +1,21 @@
+name: Deploy Databricks Jobs
+on:
+  push:
+    branches: [main]
+    paths: ['databricks/jobs/**']
+  workflow_dispatch:
+
+jobs:
+  deploy-jobs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy job definition
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: |
+          # Use Databricks API 2.0 Jobs create/update with databricks-cli or curl
+          # job_id = $(curl -s -X POST "$DATABRICKS_HOST/api/2.0/jobs/create" -H "Authorization: Bearer $DATABRICKS_TOKEN" -d @databricks/jobs/retailflow_main_job.json | jq -r .job_id)
+          echo "Deploy job JSON via API; update notebook paths to match workspace paths"

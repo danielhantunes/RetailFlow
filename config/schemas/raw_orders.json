@@ -1,0 +1,16 @@
+{
+  "type": "record",
+  "name": "raw_order",
+  "fields": [
+    { "name": "order_id", "type": "string" },
+    { "name": "customer_id", "type": "string" },
+    { "name": "order_date", "type": "string" },
+    { "name": "status", "type": "string" },
+    { "name": "total_amount", "type": "double" },
+    { "name": "currency", "type": "string" },
+    { "name": "line_items", "type": { "type": "array", "items": "string" } },
+    { "name": "shipping_address", "type": "string" },
+    { "name": "created_at", "type": "string" },
+    { "name": "updated_at", "type": "string" }
+  ]
+}

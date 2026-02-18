@@ -1,0 +1,26 @@
+name: retailflow
+version: "1.0.0"
+config-version: 2
+profile: retailflow
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+vars:
+  catalog: "retailflow_dev"
+  silver_schema: "silver"
+  gold_schema: "gold"
+
+models:
+  retailflow:
+    staging:
+      +schema: "silver"
+      +materialized: view
+    marts:
+      +schema: "gold"
+      +materialized: table

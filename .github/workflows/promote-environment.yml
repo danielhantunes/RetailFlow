@@ -1,0 +1,34 @@
+name: Promote Environment (Stg / Prod)
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'stg'
+        type: choice
+        options:
+          - stg
+          - prod
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set config for environment
+        run: |
+          echo "ENV=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
+          cat config/environments/${{ github.event.inputs.environment }}.yaml
+
+      - name: Deploy Terraform (optional)
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+        run: |
+          # cd terraform && terraform workspace select ${{ github.event.inputs.environment }} && terraform apply -auto-approve
+          echo "Terraform apply for selected environment"

@@ -1,0 +1,4 @@
+environment   = "dev"
+azure_region  = "East US"
+databricks_sku = "premium"
+create_networking = false

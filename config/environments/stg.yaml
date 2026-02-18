@@ -1,0 +1,25 @@
+# RetailFlow - Staging Environment Configuration
+
+environment: stg
+databricks:
+  workspace_url: https://adb-yyyy.azuredatabricks.net
+  workspace_id: "987654321"
+storage:
+  account_name: retailflowstgsa
+  container_raw: raw
+  container_processed: processed
+  base_path: abfss://raw@retailflowstgsa.dfs.core.windows.net
+catalog:
+  name: retailflow_stg
+  raw_schema: raw
+  bronze_schema: bronze
+  silver_schema: silver
+  gold_schema: gold
+key_vault:
+  name: retailflow-stg-kv
+  secret_scope: retailflow-keyvault
+ingestion:
+  orders_api_base_url: https://api-stg.retail.example.com/orders
+  customers_api_base_url: https://api-stg.retail.example.com/customers
+  batch_size: 5000
+  watermark_column: updated_at

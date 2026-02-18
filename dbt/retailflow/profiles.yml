@@ -1,0 +1,22 @@
+retailflow:
+  target: dev
+  outputs:
+    dev:
+      type: databricks
+      catalog: retailflow_dev
+      schema: gold
+      host: "{{ env_var('DATABRICKS_HOST') }}"
+      token: "{{ env_var('DATABRICKS_TOKEN') }}"
+      cluster_id: "{{ env_var('DATABRICKS_CLUSTER_ID', '') }}"
+    stg:
+      type: databricks
+      catalog: retailflow_stg
+      schema: gold
+      host: "{{ env_var('DATABRICKS_HOST') }}"
+      token: "{{ env_var('DATABRICKS_TOKEN') }}"
+    prod:
+      type: databricks
+      catalog: retailflow_prod
+      schema: gold
+      host: "{{ env_var('DATABRICKS_HOST') }}"
+      token: "{{ env_var('DATABRICKS_TOKEN') }}"

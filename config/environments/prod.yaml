@@ -1,0 +1,25 @@
+# RetailFlow - Production Environment Configuration
+
+environment: prod
+databricks:
+  workspace_url: https://adb-zzzz.azuredatabricks.net
+  workspace_id: "456789123"
+storage:
+  account_name: retailflowprodsa
+  container_raw: raw
+  container_processed: processed
+  base_path: abfss://raw@retailflowprodsa.dfs.core.windows.net
+catalog:
+  name: retailflow_prod
+  raw_schema: raw
+  bronze_schema: bronze
+  silver_schema: silver
+  gold_schema: gold
+key_vault:
+  name: retailflow-prod-kv
+  secret_scope: retailflow-keyvault
+ingestion:
+  orders_api_base_url: https://api.retail.example.com/orders
+  customers_api_base_url: https://api.retail.example.com/customers
+  batch_size: 10000
+  watermark_column: updated_at

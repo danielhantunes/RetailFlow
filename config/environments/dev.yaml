@@ -1,0 +1,26 @@
+# RetailFlow - Development Environment Configuration
+# Used by notebooks, jobs, and CI/CD for environment-specific settings
+
+environment: dev
+databricks:
+  workspace_url: https://adb-xxxx.azuredatabricks.net
+  workspace_id: "123456789"
+storage:
+  account_name: retailflowdevsa
+  container_raw: raw
+  container_processed: processed
+  base_path: abfss://raw@retailflowdevsa.dfs.core.windows.net
+catalog:
+  name: retailflow_dev
+  raw_schema: raw
+  bronze_schema: bronze
+  silver_schema: silver
+  gold_schema: gold
+key_vault:
+  name: retailflow-dev-kv
+  secret_scope: retailflow-keyvault
+ingestion:
+  orders_api_base_url: https://api-dev.retail.example.com/orders
+  customers_api_base_url: https://api-dev.retail.example.com/customers
+  batch_size: 1000
+  watermark_column: updated_at

@@ -1,0 +1,33 @@
+name: Deploy Notebooks to Databricks
+on:
+  push:
+    branches: [main]
+    paths: ['databricks/notebooks/**', 'dlt/**']
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.10'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure Databricks CLI
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: |
+          pip install databricks-cli
+          echo $DATABRICKS_HOST
+          echo "Configure workspace; use Repos sync or CLI to push notebooks"
+
+      - name: Sync Repos (if using Repos)
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: |
+          # Example: trigger Repos update via API
+          # curl -X PATCH "$DATABRICKS_HOST/api/2.0/repos/<repo_id>" -H "Authorization: Bearer $DATABRICKS_TOKEN"
+          echo "Add Repos repo_id and branch to sync notebooks"

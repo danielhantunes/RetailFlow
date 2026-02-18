@@ -1,0 +1,9 @@
+version: 2
+sources:
+  - name: silver
+    database: "{{ var('catalog') }}"
+    schema: "{{ var('silver_schema') }}"
+    tables:
+      - name: orders
+      - name: customers
+      - name: products
