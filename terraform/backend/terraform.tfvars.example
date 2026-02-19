@@ -1,0 +1,9 @@
+name_prefix   = "retailflow-dev"
+azure_region  = "East US"
+container_name = "tfstate"
+
+tags = {
+  Project     = "RetailFlow"
+  ManagedBy   = "Terraform"
+  Purpose     = "tfstate-backend"
+}
