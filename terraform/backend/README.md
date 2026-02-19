@@ -1,6 +1,6 @@
 # Terraform state backend bootstrap
 
-**Default Azure region for RetailFlow: East US.**
+Run this **once** (before using the main Terraform root) to create the Azure storage used for remote state. **Default Azure region for RetailFlow: East US.**
 
 Creates the Azure resources used as Terraform remote state backend:
 
@@ -11,7 +11,7 @@ Creates the Azure resources used as Terraform remote state backend:
 ## Provisioning via GitHub Actions (OIDC)
 
 1. **Azure federated identity**  
-   Create an Azure AD app registration (or user-assigned managed identity) and add a **federated credential**:
+   In Azure Portal: **Microsoft Entra ID** → **App registrations** (or **Managed identities** → user-assigned) → your app/identity → **Certificates & secrets** → **Federated credentials** → Add. Create a **federated credential** with:
    - Issuer: `https://token.actions.githubusercontent.com`
    - Subject: `repo:<org>/<repo>:ref:refs/heads/main` (or `environment:<env>` for environment-specific)
    - Audience: `api://AzureADTokenExchange`
@@ -25,7 +25,7 @@ Creates the Azure resources used as Terraform remote state backend:
    Grant the app/managed identity **Contributor** (or at least resource group + storage account creation) on the subscription or a dedicated “bootstrap” resource group.
 
 4. **Run the workflow**  
-   Actions → “Provision Terraform State Backend” → Run workflow. Use inputs for `name_prefix`, `azure_region`, `container_name`.
+   GitHub → **Actions** → **Provision Terraform State Backend** (`provision-tfstate.yml`) → **Run workflow**. Use inputs for `name_prefix`, `azure_region`, `container_name`.
 
 ## Local run (optional)
 

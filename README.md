@@ -28,6 +28,7 @@ RetailFlow/
 ├── dbt/
 │   └── retailflow/            # Optional: marts (e.g. daily_revenue)
 ├── terraform/
+│   ├── backend/              # State backend bootstrap (RG, storage, container)
 │   ├── modules/
 │   │   ├── databricks/        # Workspace
 │   │   ├── storage/          # ADLS Gen2 (raw, processed)
@@ -46,7 +47,7 @@ RetailFlow/
 │   ├── RAW_LAYER_DESIGN.md
 │   ├── UNITY_CATALOG.md
 │   └── OBSERVABILITY.md
-├── .github/workflows/         # CI/CD: deploy notebooks, jobs, promote env, tests
+├── .github/workflows/         # CI/CD: provision tfstate, deploy notebooks/jobs, promote env, tests
 ├── .gitignore
 └── README.md
 ```
@@ -102,9 +103,9 @@ Main pipeline job: [databricks/jobs/retailflow_main_job.json](databricks/jobs/re
 
 ## Terraform
 
+- **State backend first:** Create the remote state storage once (run the **Provision Terraform State Backend** workflow or apply `terraform/backend`), then configure the main root’s `backend "azurerm"` using the backend output (see [terraform/backend/README.md](terraform/backend/README.md)).
 - **Root:** `main.tf` wires resource group, Databricks module, storage, Key Vault, optional networking.
 - **Modules:** `databricks` (workspace), `storage` (ADLS Gen2, containers `raw`/`processed`), `key_vault`, `networking` (VNet/subnets).
-- **Backend:** Configure `backend "azurerm"` (e.g. state in Azure Storage).
 - **Environments:** Use `terraform.tfvars` or workspaces for dev/stg/prod; see `terraform.tfvars.example`.
 
 ```bash
@@ -118,12 +119,15 @@ terraform apply -var="environment=dev"
 
 ## CI/CD (GitHub Actions)
 
-- **deploy-notebooks.yml:** On push to `main` (databricks/notebooks, dlt) — sync notebooks (e.g. via Repos).
-- **deploy-jobs.yml:** On push to job definitions — deploy/update Databricks jobs via API.
-- **promote-environment.yml:** Manual; promote to stg or prod (config + optional Terraform).
-- **tests.yml:** Pytest unit tests + Ruff lint on push/PR.
+All workflows are **manual** (`workflow_dispatch`) unless noted.
 
-Secrets: `DATABRICKS_HOST`, `DATABRICKS_TOKEN`; for Terraform: `ARM_*`.
+- **provision-tfstate.yml:** Provisions Azure Terraform state backend (resource group, storage account with versioning, private container). Uses **OIDC** (no client secret). Run once before using the main Terraform backend.
+- **deploy-notebooks.yml:** Sync notebooks to Databricks (e.g. via Repos).
+- **deploy-jobs.yml:** Deploy/update Databricks jobs from repo.
+- **promote-environment.yml:** Promote to stg or prod (config + optional Terraform).
+- **tests.yml:** Pytest unit tests + Ruff lint.
+
+**Secrets:** Databricks: `DATABRICKS_HOST`, `DATABRICKS_TOKEN`. Terraform state backend (OIDC): `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`. Promote (service principal): `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`.
 
 ---
 
@@ -149,7 +153,7 @@ See [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md).
 
 ## Next steps
 
-See [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md) for implementation checklist: Terraform apply, secret scope, RAW bootstrap, run jobs, DLT, dbt, and monitoring.
+See [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md) for implementation checklist. **First:** provision the Terraform state backend (run **Provision Terraform State Backend** workflow or apply [terraform/backend](terraform/backend/README.md)), then Terraform apply, secret scope, RAW bootstrap, run jobs, DLT, dbt, and monitoring.
 
 ---
 
