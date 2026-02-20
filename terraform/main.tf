@@ -18,9 +18,9 @@ terraform {
     }
   }
   backend "azurerm" {
-    # Configure via backend config or CLI
-    # resource_group_name  = "retailflow-tfstate-rg"
-    # storage_account_name = "retailflowtfstate"
+    # Populate after provisioning state backend via GitHub Actions (OIDC): run Provision Terraform State Backend workflow, then set:
+    # resource_group_name  = "<output from workflow or terraform/backend>"
+    # storage_account_name = "<output from workflow or terraform/backend>"
     # container_name       = "tfstate"
     # key                  = "retailflow.tfstate"
   }

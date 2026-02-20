@@ -2,7 +2,7 @@
 
 ## 1. Terraform
 
-- Create an Azure Storage account and container for Terraform state; uncomment and set `backend "azurerm"` in `terraform/main.tf`.
+- **State backend (OIDC + GitHub Actions):** Provision the Terraform remote state first. In GitHub, configure OIDC (federated credential in Azure AD + secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`). Run the **Provision Terraform State Backend** workflow once, then fill `backend "azurerm"` in `terraform/main.tf` from the workflow output (or from `terraform output backend_config` if you ran `terraform/backend` locally).
 - Copy `terraform/terraform.tfvars.example` to `terraform/terraform.tfvars` and set `environment`, `azure_region`, and optionally `create_networking`.
 - Run `terraform init`, `terraform plan`, `terraform apply` for dev. Repeat for stg/prod using separate tfvars or workspaces.
 - Note: Storage module expects `databricks_workspace_principal_id` for role assignment; if the workspace does not expose `storage_identity`, assign Storage Blob Data Contributor to the workspace identity manually in Azure Portal.
@@ -42,7 +42,7 @@
 
 ## 9. CI/CD
 
-- In GitHub, add secrets: `DATABRICKS_HOST`, `DATABRICKS_TOKEN`. For environment promotion, add `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID` and optionally use GitHub Environments (stg, prod).
+- In GitHub, add secrets: `DATABRICKS_HOST`, `DATABRICKS_TOKEN`. For **Terraform state backend (OIDC):** `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (no client secret). For environment promotion: `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`; optionally use GitHub Environments (stg, prod).
 - Adjust deploy workflows to your repo structure (e.g. Repos repo ID for notebook sync).
 
 ## 10. Observability

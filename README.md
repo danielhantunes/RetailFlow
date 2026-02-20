@@ -103,7 +103,9 @@ Main pipeline job: [databricks/jobs/retailflow_main_job.json](databricks/jobs/re
 
 ## Terraform
 
-- **State backend first:** Create the remote state storage once (run the **Provision Terraform State Backend** workflow or apply `terraform/backend`), then configure the main root’s `backend "azurerm"` using the backend output (see [terraform/backend/README.md](terraform/backend/README.md)).
+We use **OIDC + GitHub Actions** to provision the Terraform remote state (no Azure client secret). The **Provision Terraform State Backend** workflow runs Terraform in `terraform/backend` to create the state storage; authenticate with Azure via federated identity.
+
+- **State backend first:** Create the remote state storage once (run the **Provision Terraform State Backend** workflow or apply `terraform/backend` locally), then configure the main root’s `backend "azurerm"` using the backend output (see [terraform/backend/README.md](terraform/backend/README.md)).
 - **Root:** `main.tf` wires resource group, Databricks module, storage, Key Vault, optional networking.
 - **Modules:** `databricks` (workspace), `storage` (ADLS Gen2, containers `raw`/`processed`), `key_vault`, `networking` (VNet/subnets).
 - **Environments:** Use `terraform.tfvars` or workspaces for dev/stg/prod; see `terraform.tfvars.example`.
