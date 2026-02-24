@@ -52,6 +52,8 @@ RetailFlow/
 └── README.md
 ```
 
+**CI entry point:** Run [Provision Terraform State Backend](.github/workflows/provision-tfstate.yml) first (OIDC); then use other workflows as needed.
+
 ---
 
 ## Architecture (summary)
@@ -128,6 +130,8 @@ All workflows are **manual** (`workflow_dispatch`) unless noted.
 - **deploy-jobs.yml:** Deploy/update Databricks jobs from repo.
 - **promote-environment.yml:** Promote to stg or prod (config + optional Terraform).
 - **tests.yml:** Pytest unit tests + Ruff lint.
+
+See [.github/workflows/provision-tfstate.yml](.github/workflows/provision-tfstate.yml) for the state backend workflow (run first); other workflows in the same folder.
 
 **Secrets:** Databricks: `DATABRICKS_HOST`, `DATABRICKS_TOKEN`. Terraform state backend (OIDC): `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`. Promote (service principal): `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`.
 
