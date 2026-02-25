@@ -1,12 +1,25 @@
 # Terraform state backend bootstrap
 
-The Terraform remote state backend is provisioned via **GitHub Actions using OIDC** (no Azure client secret). Run this **once** (before using the main Terraform root) to create the Azure storage used for remote state. **Default Azure region for RetailFlow: East US.**
+The Terraform remote state backend is provisioned via **GitHub Actions using OIDC** (no Azure client secret). Run this **once per environment** (before using the main Terraform root) to create the Azure storage used for remote state. **Default Azure region for RetailFlow: East US.**
 
 Creates the Azure resources used as Terraform remote state backend:
 
 - **Resource group** — `{name_prefix}-tfstate-rg`
 - **Storage account** — `{name_prefix}tfstate` (hyphens removed), with **blob versioning** enabled
 - **Private container** — `tfstate` (or custom), no public access
+
+## Separate backends for dev and prod (recommended)
+
+Use a **separate state backend for production** to isolate blast radius, access control, and compliance:
+
+| Environment | Run workflow with `name_prefix` | Storage account created | State key (main Terraform) |
+|-------------|---------------------------------|--------------------------|----------------------------|
+| **Dev**     | `retailflow-dev`                | `retailflowdevtfstate`   | `retailflow-dev.tfstate`   |
+| **Prod**    | `retailflow-prod`               | `retailflowprodtfstate`  | `retailflow-prod.tfstate`  |
+
+1. Run **Provision Terraform State Backend (Dev)** workflow (creates dev backend `retailflowdevtfstate`).
+2. Run **Provision Terraform State Backend (Prod)** workflow (creates prod backend `retailflowprodtfstate`).
+3. When running main Terraform, pass backend config at init (e.g. from the workflow output `terraform output backend_config`, or set `resource_group_name`, `storage_account_name`, `container_name`, and `key` per environment: dev key `retailflow-dev.tfstate`, prod key `retailflow-prod.tfstate`).
 
 ## Provisioning via GitHub Actions (OIDC)
 
@@ -25,7 +38,8 @@ Creates the Azure resources used as Terraform remote state backend:
    Grant the app/managed identity **Contributor** (or at least resource group + storage account creation) on the subscription or a dedicated “bootstrap” resource group.
 
 4. **Run the workflow**  
-   GitHub → **Actions** → **Provision Terraform State Backend** (`provision-tfstate.yml`) → **Run workflow**. Use inputs for `name_prefix`, `azure_region`, `container_name`.
+   - **Dev:** GitHub → **Actions** → **Provision Terraform State Backend (Dev)** (`provision-tfstate-dev.yml`) → **Run workflow**. Optional inputs: `azure_region`, `container_name`.
+   - **Prod:** GitHub → **Actions** → **Provision Terraform State Backend (Prod)** (`provision-tfstate-prod.yml`) → **Run workflow** when you need a separate prod state backend.
 
 ## Local run (optional)
 
@@ -38,4 +52,4 @@ terraform plan
 terraform apply
 ```
 
-State for this bootstrap is stored locally by default. After the backend exists, configure the main Terraform root to use the azurerm backend (see `terraform output backend_config`).
+State for this bootstrap is stored locally by default. After the backend exists, configure the main Terraform root to use the azurerm backend: run `terraform output backend_config` and use that snippet (set `key` to `retailflow-dev.tfstate` or `retailflow-prod.tfstate` per environment), or pass `-backend-config=...` at init.

@@ -2,9 +2,9 @@
 
 ## 1. Terraform
 
-- **State backend (OIDC + GitHub Actions):** Provision the Terraform remote state first. In GitHub, configure OIDC (federated credential in Azure AD + secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`). Run the **Provision Terraform State Backend** workflow once, then fill `backend "azurerm"` in `terraform/main.tf` from the workflow output (or from `terraform output backend_config` if you ran `terraform/backend` locally).
+- **State backend (OIDC + GitHub Actions):** Provision the Terraform remote state first. In GitHub, configure OIDC (federated credential in Azure AD + secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`). Run **Provision Terraform State Backend (Dev)** to create the dev backend (`retailflowdevtfstate`); run **Provision Terraform State Backend (Prod)** to create the prod backend (`retailflowprodtfstate`). Configure the main root’s backend from the workflow output (`terraform output backend_config`) or see [terraform/backend/README.md](../terraform/backend/README.md).
 - Copy `terraform/terraform.tfvars.example` to `terraform/terraform.tfvars` and set `environment`, `azure_region`, and optionally `create_networking`.
-- Run `terraform init`, `terraform plan`, `terraform apply` for dev. Repeat for stg/prod using separate tfvars or workspaces.
+- Run `terraform init` with backend config (from provision workflow output), then `terraform plan`, `terraform apply` for dev. For prod, use prod backend config and prod tfvars (separate state in `retailflowprodtfstate`).
 - Note: Storage module expects `databricks_workspace_principal_id` for role assignment; if the workspace does not expose `storage_identity`, assign Storage Blob Data Contributor to the workspace identity manually in Azure Portal.
 
 ## 2. Unity Catalog and secret scope

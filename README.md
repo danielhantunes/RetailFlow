@@ -52,7 +52,7 @@ RetailFlow/
 └── README.md
 ```
 
-**CI entry point:** Run [Provision Terraform State Backend](.github/workflows/provision-tfstate.yml) first (OIDC); then use other workflows as needed.
+**CI entry point:** Run [Provision Terraform State Backend (Dev)](.github/workflows/provision-tfstate-dev.yml) first (OIDC); optionally [Provision Terraform State Backend (Prod)](.github/workflows/provision-tfstate-prod.yml) for separate prod state; then use other workflows as needed.
 
 ---
 
@@ -105,9 +105,9 @@ Main pipeline job: [databricks/jobs/retailflow_main_job.json](databricks/jobs/re
 
 ## Terraform
 
-We use **OIDC + GitHub Actions** to provision the Terraform remote state (no Azure client secret). The **Provision Terraform State Backend** workflow runs Terraform in `terraform/backend` to create the state storage; authenticate with Azure via federated identity.
+We use **OIDC + GitHub Actions** to provision the Terraform remote state (no Azure client secret). **Provision Terraform State Backend (Dev)** creates the dev state storage (`retailflowdevtfstate`); **Provision Terraform State Backend (Prod)** creates the prod state storage (`retailflowprodtfstate`). Authenticate with Azure via federated identity.
 
-- **State backend first:** Create the remote state storage once (run the **Provision Terraform State Backend** workflow or apply `terraform/backend` locally), then configure the main root’s `backend "azurerm"` using the backend output (see [terraform/backend/README.md](terraform/backend/README.md)).
+- **State backend first:** Run **Provision Terraform State Backend (Dev)** for dev; run **Provision Terraform State Backend (Prod)** when you need a separate prod state (or apply `terraform/backend` locally). Then configure the main root’s `backend "azurerm"` from the provision workflow output or [terraform/backend/README.md](terraform/backend/README.md).
 - **Root:** `main.tf` wires resource group, Databricks module, storage, Key Vault, optional networking.
 - **Modules:** `databricks` (workspace), `storage` (ADLS Gen2, containers `raw`/`processed`), `key_vault`, `networking` (VNet/subnets).
 - **Environments:** Use `terraform.tfvars` or workspaces for dev/stg/prod; see `terraform.tfvars.example`.
@@ -125,13 +125,14 @@ terraform apply -var="environment=dev"
 
 All workflows are **manual** (`workflow_dispatch`) unless noted.
 
-- **provision-tfstate.yml:** Provisions Azure Terraform state backend (resource group, storage account with versioning, private container). Uses **OIDC** (no client secret). Run once before using the main Terraform backend.
+- **provision-tfstate-dev.yml:** Provisions **dev** Terraform state backend only (resource group, storage account `retailflowdevtfstate`, container). Uses **OIDC** (no client secret). Run first before using the main Terraform backend for dev.
+- **provision-tfstate-prod.yml:** Provisions **prod** Terraform state backend only (storage account `retailflowprodtfstate`). Run when you need a separate prod state backend.
 - **deploy-notebooks.yml:** Sync notebooks to Databricks (e.g. via Repos).
 - **deploy-jobs.yml:** Deploy/update Databricks jobs from repo.
 - **promote-environment.yml:** Promote to stg or prod (config + optional Terraform).
 - **tests.yml:** Pytest unit tests + Ruff lint.
 
-See [.github/workflows/provision-tfstate.yml](.github/workflows/provision-tfstate.yml) for the state backend workflow (run first); other workflows in the same folder.
+See [.github/workflows/provision-tfstate-dev.yml](.github/workflows/provision-tfstate-dev.yml) (dev) and [.github/workflows/provision-tfstate-prod.yml](.github/workflows/provision-tfstate-prod.yml) (prod) for the state backend workflows; other workflows in the same folder.
 
 **Secrets:** Databricks: `DATABRICKS_HOST`, `DATABRICKS_TOKEN`. Terraform state backend (OIDC): `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`. Promote (service principal): `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`.
 
@@ -159,7 +160,7 @@ See [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md).
 
 ## Next steps
 
-See [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md) for implementation checklist. **First:** provision the Terraform state backend (run **Provision Terraform State Backend** workflow or apply [terraform/backend](terraform/backend/README.md)), then Terraform apply, secret scope, RAW bootstrap, run jobs, DLT, dbt, and monitoring.
+See [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md) for implementation checklist. **First:** run **Provision Terraform State Backend (Dev)** (and **Provision Terraform State Backend (Prod)** if you want separate prod state), or apply [terraform/backend](terraform/backend/README.md) locally. Then init main Terraform with the matching backend config (from workflow output or [terraform/backend/README.md](terraform/backend/README.md)), Terraform apply, secret scope, RAW bootstrap, run jobs, DLT, dbt, and monitoring.
 
 ---
 

@@ -1,16 +1,12 @@
-# Provision Azure Terraform remote state infrastructure (bootstrap).
+# Provision Azure Terraform remote state infrastructure (bootstrap) — PROD only.
+# Creates: resource group retailflow-prod-tfstate-rg, storage account retailflowprodtfstate, container tfstate.
 # Uses OIDC; no long-lived Azure secrets required.
-# Run once per subscription/prefix to create: resource group, storage account (blob versioning), private container.
+# Run after "Provision Terraform State Backend (Dev)" when you need a separate prod state backend.
 
-name: Provision Terraform State Backend
+name: Provision Terraform State Backend (Prod)
 on:
   workflow_dispatch:
     inputs:
-      name_prefix:
-        description: 'Resource name prefix (e.g. retailflow-dev). Storage account will have hyphens removed.'
-        required: true
-        default: 'retailflow-dev'
-        type: string
       azure_region:
         description: 'Azure region (default for RetailFlow: East US)'
         required: false
@@ -29,10 +25,11 @@ permissions:
 env:
   TF_VERSION: '1.5.0'
   ARM_USE_OIDC: true
+  NAME_PREFIX: 'retailflow-prod'
 
 jobs:
-  provision-tfstate:
-    name: Provision TF state backend
+  provision-tfstate-prod:
+    name: Provision TF state backend (Prod)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -59,19 +56,19 @@ jobs:
 
       - name: Terraform Plan
         run: |
-          terraform plan -no-color -var="name_prefix=${{ github.event.inputs.name_prefix }}" \
+          terraform plan -no-color -var="name_prefix=${{ env.NAME_PREFIX }}" \
             -var="azure_region=${{ github.event.inputs.azure_region }}" \
             -var="container_name=${{ github.event.inputs.container_name }}" \
-            -var='tags={Project="RetailFlow",ManagedBy="GitHub-Actions",Purpose="tfstate-backend"}'
+            -var='tags={Project="RetailFlow",ManagedBy="GitHub-Actions",Purpose="tfstate-backend-prod"}'
         continue-on-error: false
 
       - name: Terraform Apply
         run: |
           terraform apply -auto-approve -no-color \
-            -var="name_prefix=${{ github.event.inputs.name_prefix }}" \
+            -var="name_prefix=${{ env.NAME_PREFIX }}" \
             -var="azure_region=${{ github.event.inputs.azure_region }}" \
             -var="container_name=${{ github.event.inputs.container_name }}" \
-            -var='tags={Project="RetailFlow",ManagedBy="GitHub-Actions",Purpose="tfstate-backend"}'
+            -var='tags={Project="RetailFlow",ManagedBy="GitHub-Actions",Purpose="tfstate-backend-prod"}'
 
       - name: Output backend config
         run: terraform output -raw backend_config

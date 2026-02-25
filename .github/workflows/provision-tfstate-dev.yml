@@ -1,0 +1,75 @@
+# Provision Azure Terraform remote state infrastructure (bootstrap) — DEV only.
+# Creates: resource group retailflow-dev-tfstate-rg, storage account retailflowdevtfstate, container tfstate.
+# Uses OIDC; no long-lived Azure secrets required.
+# For production state backend, run "Provision Terraform State Backend (Prod)" workflow.
+
+name: Provision Terraform State Backend (Dev)
+on:
+  workflow_dispatch:
+    inputs:
+      azure_region:
+        description: 'Azure region (default for RetailFlow: East US)'
+        required: false
+        default: 'East US'
+        type: string
+      container_name:
+        description: 'Blob container name for state'
+        required: false
+        default: 'tfstate'
+        type: string
+
+permissions:
+  id-token: write   # Required for OIDC to Azure
+  contents: read
+
+env:
+  TF_VERSION: '1.5.0'
+  ARM_USE_OIDC: true
+  NAME_PREFIX: 'retailflow-dev'
+
+jobs:
+  provision-tfstate-dev:
+    name: Provision TF state backend (Dev)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform/backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        run: |
+          terraform plan -no-color -var="name_prefix=${{ env.NAME_PREFIX }}" \
+            -var="azure_region=${{ github.event.inputs.azure_region }}" \
+            -var="container_name=${{ github.event.inputs.container_name }}" \
+            -var='tags={Project="RetailFlow",ManagedBy="GitHub-Actions",Purpose="tfstate-backend-dev"}'
+        continue-on-error: false
+
+      - name: Terraform Apply
+        run: |
+          terraform apply -auto-approve -no-color \
+            -var="name_prefix=${{ env.NAME_PREFIX }}" \
+            -var="azure_region=${{ github.event.inputs.azure_region }}" \
+            -var="container_name=${{ github.event.inputs.container_name }}" \
+            -var='tags={Project="RetailFlow",ManagedBy="GitHub-Actions",Purpose="tfstate-backend-dev"}'
+
+      - name: Output backend config
+        run: terraform output -raw backend_config
+        continue-on-error: true
