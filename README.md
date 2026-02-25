@@ -11,7 +11,7 @@ Production-grade data platform for a retail company, built on **Azure Databricks
 ```
 RetailFlow/
 ├── config/
-│   ├── environments/          # dev, stg, prod config (YAML)
+│   ├── environments/          # dev, prod config (YAML)
 │   └── schemas/               # Raw schema references (JSON)
 ├── databricks/
 │   ├── notebooks/
@@ -110,7 +110,7 @@ We use **OIDC + GitHub Actions** to provision the Terraform remote state (no Azu
 - **State backend first:** Run **Provision Terraform State Backend (Dev)** for dev; run **Provision Terraform State Backend (Prod)** when you need a separate prod state (or apply `terraform/backend` locally). Then configure the main root’s `backend "azurerm"` from the provision workflow output or [terraform/backend/README.md](terraform/backend/README.md).
 - **Root:** `main.tf` wires resource group, Databricks module, storage, Key Vault, optional networking.
 - **Modules:** `databricks` (workspace), `storage` (ADLS Gen2, containers `raw`/`processed`), `key_vault`, `networking` (VNet/subnets).
-- **Environments:** Use `terraform.tfvars` or workspaces for dev/stg/prod; see `terraform.tfvars.example`.
+- **Environments:** Dev and prod only. Use `terraform.tfvars` (or separate state backends) per environment; see `terraform.tfvars.example`.
 
 ```bash
 cd terraform
@@ -129,7 +129,7 @@ All workflows are **manual** (`workflow_dispatch`) unless noted.
 - **provision-tfstate-prod.yml:** Provisions **prod** Terraform state backend only (storage account `retailflowprodtfstate`). Run when you need a separate prod state backend.
 - **deploy-notebooks.yml:** Sync notebooks to Databricks (e.g. via Repos).
 - **deploy-jobs.yml:** Deploy/update Databricks jobs from repo.
-- **promote-environment.yml:** Promote to stg or prod (config + optional Terraform).
+- **promote-environment.yml:** Promote to prod (config + optional Terraform).
 - **tests.yml:** Pytest unit tests + Ruff lint.
 
 See [.github/workflows/provision-tfstate-dev.yml](.github/workflows/provision-tfstate-dev.yml) (dev) and [.github/workflows/provision-tfstate-prod.yml](.github/workflows/provision-tfstate-prod.yml) (prod) for the state backend workflows; other workflows in the same folder.
@@ -140,7 +140,7 @@ See [.github/workflows/provision-tfstate-dev.yml](.github/workflows/provision-tf
 
 ## Unity Catalog and secrets
 
-- Catalogs: `retailflow_dev`, `retailflow_stg`, `retailflow_prod` with schemas `raw`, `bronze`, `silver`, `gold`.
+- Catalogs: `retailflow_dev`, `retailflow_prod` with schemas `raw`, `bronze`, `silver`, `gold`.
 - Roles: raw_ingestion, bronze_reader, silver_reader, gold_reader, analytics, platform_admin.
 - Secret scope: Azure Key Vault–backed scope (e.g. `retailflow-keyvault`) for API keys and DB connection strings.
 
