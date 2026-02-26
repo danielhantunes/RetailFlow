@@ -29,12 +29,10 @@ RetailFlow/
 │   └── retailflow/            # Optional: marts (e.g. daily_revenue)
 ├── terraform/
 │   ├── backend/              # State backend bootstrap (RG, storage, container)
-│   ├── modules/
-│   │   ├── databricks/        # Workspace
-│   │   ├── storage/          # ADLS Gen2 (raw, processed)
-│   │   ├── key_vault/        # Secrets
-│   │   └── networking/       # VNet placeholders
-│   ├── main.tf
+│   ├── base/                 # Layer 1: RG, VNet, Subnets, ADLS Gen2 (retailflowdevdls), Private Endpoint
+│   ├── databricks/           # Layer 2: Databricks workspace only (retailflow-dev-dbw, standard)
+│   ├── modules/              # Legacy/shared: databricks, storage, key_vault, networking
+│   ├── main.tf               # Legacy single-root (optional)
 │   ├── variables.tf
 │   └── terraform.tfvars.example
 ├── scripts/                   # Bootstrap RAW folders, secret scope
@@ -52,7 +50,7 @@ RetailFlow/
 └── README.md
 ```
 
-**CI entry point:** Run [Provision Terraform State Backend (Dev)](.github/workflows/provision-tfstate-dev.yml) first (OIDC); optionally [Provision Terraform State Backend (Prod)](.github/workflows/provision-tfstate-prod.yml) for separate prod state; then use other workflows as needed.
+**CI entry point:** Run [Provision Terraform State Backend (Dev)](.github/workflows/provision-tfstate-dev.yml) first (OIDC). Then [Terraform Base (Dev)](.github/workflows/terraform-base-dev.yml) for base infra, then [Terraform Databricks (Dev)](.github/workflows/terraform-databricks-dev.yml) for the workspace. Optionally [Provision Terraform State Backend (Prod)](.github/workflows/provision-tfstate-prod.yml) for separate prod state.
 
 ---
 
@@ -105,19 +103,12 @@ Main pipeline job: [databricks/jobs/retailflow_main_job.json](databricks/jobs/re
 
 ## Terraform
 
-We use **OIDC + GitHub Actions** to provision the Terraform remote state (no Azure client secret). **Provision Terraform State Backend (Dev)** creates the dev state storage (`retailflowdevtfstate`); **Provision Terraform State Backend (Prod)** creates the prod state storage (`retailflowprodtfstate`). Authenticate with Azure via federated identity.
+Infrastructure is split into **two layers** so base infra and Databricks can be managed (and destroyed) independently. We use **OIDC + GitHub Actions** for remote state and for running Terraform (no Azure client secret).
 
-- **State backend first:** Run **Provision Terraform State Backend (Dev)** for dev; run **Provision Terraform State Backend (Prod)** when you need a separate prod state (or apply `terraform/backend` locally). Then configure the main root’s `backend "azurerm"` from the provision workflow output or [terraform/backend/README.md](terraform/backend/README.md).
-- **Root:** `main.tf` wires resource group, Databricks module, storage, Key Vault, optional networking.
-- **Modules:** `databricks` (workspace), `storage` (ADLS Gen2, containers `raw`/`processed`), `key_vault`, `networking` (VNet/subnets).
-- **Environments:** Dev and prod only. Use `terraform.tfvars` (or separate state backends) per environment; see `terraform.tfvars.example`.
-
-```bash
-cd terraform
-terraform init
-terraform plan -var="environment=dev"
-terraform apply -var="environment=dev"
-```
+- **State backend first:** Run **Provision Terraform State Backend (Dev)** (creates `retailflow-dev-tfstate-rg`, storage `retailflowdevtfstate`). Optionally run **Provision Terraform State Backend (Prod)** for prod. See [terraform/backend/README.md](terraform/backend/README.md).
+- **Layer 1 – Base (terraform/base):** Resource group, VNet, subnets, **Azure Data Lake Storage Gen2** (`retailflowdevdls`, hierarchical namespace), private endpoint. Managed by **[Terraform Base (Dev)](.github/workflows/terraform-base-dev.yml)** — action: `plan` \| `apply` \| `destroy`. State: `retailflow-dev-base.tfstate`.
+- **Layer 2 – Databricks only (terraform/databricks):** **Azure Databricks Workspace** `retailflow-dev-dbw`, **standard** tier. Depends on base (reads its state). Managed by **[Terraform Databricks (Dev)](.github/workflows/terraform-databricks-dev.yml)** — action: `plan` \| `apply` \| `destroy`. State: `retailflow-dev-databricks.tfstate`. Run base first, then this to create the workspace; use destroy on this workflow only to tear down Databricks without touching base.
+- **Environments:** Dev and prod only. Prod uses separate state backends and (when added) prod-specific workflows.
 
 ---
 
@@ -125,14 +116,16 @@ terraform apply -var="environment=dev"
 
 All workflows are **manual** (`workflow_dispatch`) unless noted.
 
-- **provision-tfstate-dev.yml:** Provisions **dev** Terraform state backend only (resource group, storage account `retailflowdevtfstate`, container). Uses **OIDC** (no client secret). Run first before using the main Terraform backend for dev.
-- **provision-tfstate-prod.yml:** Provisions **prod** Terraform state backend only (storage account `retailflowprodtfstate`). Run when you need a separate prod state backend.
+- **provision-tfstate-dev.yml:** Provisions **dev** Terraform state backend (`retailflowdevtfstate`). Uses **OIDC**. Run first.
+- **provision-tfstate-prod.yml:** Provisions **prod** Terraform state backend (`retailflowprodtfstate`). Run when you need separate prod state.
+- **terraform-base-dev.yml:** **Layer 1 – Base infra only.** Plan/apply/destroy: RG, VNet, subnets, ADLS Gen2 (`retailflowdevdls`), private endpoint. Working dir: `terraform/base`. Input: `action` (plan \| apply \| destroy).
+- **terraform-databricks-dev.yml:** **Layer 2 – Databricks only.** Plan/apply/destroy: Databricks workspace `retailflow-dev-dbw` (standard). Working dir: `terraform/databricks`. Run base first. Input: `action` (plan \| apply \| destroy).
 - **deploy-notebooks.yml:** Sync notebooks to Databricks (e.g. via Repos).
 - **deploy-jobs.yml:** Deploy/update Databricks jobs from repo.
 - **promote-environment.yml:** Promote to prod (config + optional Terraform).
 - **tests.yml:** Pytest unit tests + Ruff lint.
 
-See [.github/workflows/provision-tfstate-dev.yml](.github/workflows/provision-tfstate-dev.yml) (dev) and [.github/workflows/provision-tfstate-prod.yml](.github/workflows/provision-tfstate-prod.yml) (prod) for the state backend workflows; other workflows in the same folder.
+Workflows live in [.github/workflows/](.github/workflows/).
 
 **Secrets:** Databricks: `DATABRICKS_HOST`, `DATABRICKS_TOKEN`. Terraform state backend (OIDC): `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`. Promote (service principal): `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`.
 
@@ -160,7 +153,7 @@ See [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md).
 
 ## Next steps
 
-See [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md) for implementation checklist. **First:** run **Provision Terraform State Backend (Dev)** (and **Provision Terraform State Backend (Prod)** if you want separate prod state), or apply [terraform/backend](terraform/backend/README.md) locally. Then init main Terraform with the matching backend config (from workflow output or [terraform/backend/README.md](terraform/backend/README.md)), Terraform apply, secret scope, RAW bootstrap, run jobs, DLT, dbt, and monitoring.
+See [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md) for implementation checklist. **First:** run **Provision Terraform State Backend (Dev)**; then **Terraform Base (Dev)** with action `apply`; then **Terraform Databricks (Dev)** with action `apply`. After infra is up: secret scope, RAW bootstrap, run jobs, DLT, dbt, and monitoring.
 
 ---
 

@@ -1,0 +1,95 @@
+# Layer 2 – Databricks ONLY (dev)
+# This workflow manages ONLY Databricks resources: Azure Databricks Workspace (retailflow-dev-dbw, standard tier).
+# No base infra (RG, VNet, Storage, etc.). Depends on base; run terraform-base-dev.yml first.
+
+name: Terraform Databricks (Dev)
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Terraform action'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+        default: plan
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: terraform-databricks-dev-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TF_VERSION: '1.5.0'
+  ARM_USE_OIDC: true
+  # Remote state backend (dev)
+  TF_BACKEND_RESOURCE_GROUP: retailflow-dev-tfstate-rg
+  TF_BACKEND_STORAGE_ACCOUNT: retailflowdevtfstate
+  TF_BACKEND_CONTAINER: tfstate
+  TF_BACKEND_KEY: retailflow-dev-databricks.tfstate
+  # For remote_state data source (read base layer state)
+  TF_VAR_tfstate_resource_group_name: retailflow-dev-tfstate-rg
+  TF_VAR_tfstate_storage_account_name: retailflowdevtfstate
+  TF_VAR_tfstate_container_name: tfstate
+  TF_VAR_tfstate_base_key: retailflow-dev-base.tfstate
+
+jobs:
+  terraform:
+    name: Terraform ${{ github.event.inputs.action }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform/databricks
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: |
+          echo "==> Initializing Terraform (backend: $TF_BACKEND_RESOURCE_GROUP / $TF_BACKEND_KEY)"
+          terraform init \
+            -backend-config="resource_group_name=$TF_BACKEND_RESOURCE_GROUP" \
+            -backend-config="storage_account_name=$TF_BACKEND_STORAGE_ACCOUNT" \
+            -backend-config="container_name=$TF_BACKEND_CONTAINER" \
+            -backend-config="key=$TF_BACKEND_KEY"
+
+      - name: Terraform Validate
+        run: |
+          echo "==> Validating configuration"
+          terraform validate
+
+      - name: Terraform Plan
+        if: github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply'
+        run: |
+          echo "==> Running terraform plan"
+          terraform plan -no-color -input=false
+
+      - name: Terraform Apply
+        if: github.event.inputs.action == 'apply'
+        run: |
+          echo "==> Applying Databricks workspace (retailflow-dev-dbw)"
+          terraform apply -auto-approve -no-color -input=false
+
+      - name: Terraform Destroy
+        if: github.event.inputs.action == 'destroy'
+        run: |
+          echo "==> Destroying Databricks workspace"
+          terraform destroy -auto-approve -no-color -input=false
