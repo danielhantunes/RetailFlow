@@ -4,6 +4,8 @@ Production-grade data platform for a retail company, built on **Azure Databricks
 
 > 🚧 **This project is under active development and continuously evolving.** The current state already reflects production-oriented design decisions.
 
+> ⚠️ **This project provisions real cloud resources and may incur costs.** Review the Terraform plan carefully before applying.
+
 ---
 
 ## Repository structure
