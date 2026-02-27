@@ -93,7 +93,7 @@ Details: [docs/RAW_LAYER_DESIGN.md](docs/RAW_LAYER_DESIGN.md).
 
 ## Example notebook (RAW orders)
 
-See [databricks/notebooks/raw/01_ingest_orders_api.py](databricks/notebooks/raw/01_ingest_orders_api.py): fetches from Orders API, writes one JSON file per run under `raw_base/ingestion_date=YYYY-MM-DD/batch_<id>.json`. No transforms.
+See [databricks/notebooks/raw/01_ingest_orders_api.py](databricks/notebooks/raw/01_ingest_orders_api.py): fetches from Orders API, writes one JSON file per run under the RAW path (e.g. `.../data/raw/orders/ingestion_date=YYYY-MM-DD/batch_<id>.json`). No transforms.
 
 ---
 
@@ -118,13 +118,34 @@ Infrastructure is split into **two layers** so base infra and Databricks can be 
 
 All workflows are **manual** (`workflow_dispatch`) unless noted.
 
-- **provision-tfstate-dev.yml:** Provisions **dev** Terraform state backend (`retailflowdevtfstate`). Uses **OIDC**. Run first.
-- **provision-tfstate-prod.yml:** Provisions **prod** Terraform state backend (`retailflowprodtfstate`). Run when you need separate prod state.
-- **terraform-base-dev.yml:** **Layer 1 – Base infra only.** Plan/apply/destroy: RG, VNet, subnets, ADLS Gen2 (`retailflowdevdls`), private endpoint. Working dir: `terraform/base`. Input: `action` (plan \| apply \| destroy).
-- **terraform-databricks-dev.yml:** **Layer 2 – Databricks only.** Plan/apply/destroy: Databricks workspace `retailflow-dev-dbw` (standard). Working dir: `terraform/databricks`. Run base first. Input: `action` (plan \| apply \| destroy).
+### Execution sequence (order matters)
+
+1. **Provision Terraform State Backend (Dev)** — `provision-tfstate-dev.yml`  
+   Run once. Creates `retailflow-dev-tfstate-rg`, storage account `retailflowdevtfstate`, container `tfstate`. Required before any Terraform plan/apply.
+
+2. **Terraform Base (Dev)** — `terraform-base-dev.yml`  
+   Run with `action: plan`, then `action: apply`. Creates RG, VNet, subnets, ADLS Gen2 (`retailflowdevdls`), private endpoint. Must complete before Layer 2.
+
+3. **Terraform Databricks (Dev)** — `terraform-databricks-dev.yml`  
+   Run with `action: plan`, then `action: apply`. Creates workspace `retailflow-dev-dbw` (standard). Depends on base; run after step 2.
+
+4. **After infra is up (any order):** deploy notebooks (`deploy-notebooks.yml`), deploy jobs (`deploy-jobs.yml`), configure secret scope, bootstrap RAW, run pipelines, dbt, monitoring.
+
+**Optional:** Run **Provision Terraform State Backend (Prod)** (`provision-tfstate-prod.yml`) when you need a separate prod state backend; then use prod Terraform workflows (when added) in the same order (base → databricks).
+
+**Tests:** Run `tests.yml` anytime (no dependency on infra).
+
+---
+
+### Workflow reference
+
+- **provision-tfstate-dev.yml:** Dev Terraform state backend. Uses **OIDC**. Run first (step 1).
+- **provision-tfstate-prod.yml:** Prod Terraform state backend. Run when you need separate prod state.
+- **terraform-base-dev.yml:** Layer 1 – base infra only. Input: `action` (plan \| apply \| destroy). Step 2.
+- **terraform-databricks-dev.yml:** Layer 2 – Databricks only. Input: `action` (plan \| apply \| destroy). Step 3.
 - **deploy-notebooks.yml:** Sync notebooks to Databricks (e.g. via Repos).
 - **deploy-jobs.yml:** Deploy/update Databricks jobs from repo.
-- **promote-environment.yml:** Promote to prod (config + optional Terraform).
+- **promote-environment.yml:** Promote to prod or stg (workflow offers both; config + optional Terraform).
 - **tests.yml:** Pytest unit tests + Ruff lint.
 
 Workflows live in [.github/workflows/](.github/workflows/).
