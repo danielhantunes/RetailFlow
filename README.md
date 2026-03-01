@@ -13,16 +13,17 @@ Production-grade data platform for a retail company, built on **Azure Databricks
 ```
 RetailFlow/
 ├── config/
-│   ├── environments/          # dev, prod config (YAML)
-│   └── schemas/               # Raw schema references (JSON)
+│   ├── environments/          # dev, stg, prod config (YAML)
+│   └── schemas/                # Raw schema references (JSON, e.g. raw_orders.json)
 ├── databricks/
 │   ├── notebooks/
 │   │   ├── raw/               # Ingestion: orders, customers, products, inventory, clickstream
 │   │   ├── bronze/            # Schema enforcement, audit columns, Delta
 │   │   ├── silver/            # Clean, dedup, validation
-│   │   ├── gold/              # fact_orders, fact_sales, dim_customer (SCD2), dim_product, daily_revenue_mart
+│   │   ├── gold/              # fact_orders, fact_sales, dim_customer (SCD2), dim_product, dim_store, inventory_snapshot, daily_revenue_mart
 │   │   └── observability/     # Job monitoring, logging
-│   └── jobs/                  # Job definition JSON (RetailFlow_Main_Pipeline)
+│   ├── jobs/                   # Job definition JSON (RetailFlow_Main_Pipeline)
+│   └── lib/                    # Shared utilities (see lib/README.md)
 ├── dlt/
 │   └── pipelines/             # Delta Live Tables: Bronze + Silver (orders)
 ├── airflow/
@@ -44,7 +45,9 @@ RetailFlow/
 ├── docs/
 │   ├── ARCHITECTURE.md
 │   ├── DATA_FLOW.md
+│   ├── NEXT_STEPS.md
 │   ├── RAW_LAYER_DESIGN.md
+│   ├── REPOSITORY_TREE.md
 │   ├── UNITY_CATALOG.md
 │   └── OBSERVABILITY.md
 ├── .github/workflows/         # CI/CD: provision tfstate, deploy notebooks/jobs, promote env, tests
@@ -61,7 +64,7 @@ RetailFlow/
 - **RAW:** ADLS Gen2; immutable; partition by `ingestion_date`; JSON/CSV/Parquet as received. Supports replay and schema evolution.
 - **Bronze:** Delta in Unity Catalog; minimal parsing, flatten JSON, audit columns (`_ingestion_ts`, `_source_file`).
 - **Silver:** Delta; cleaned, deduplicated, validated, business keys.
-- **Gold:** Delta; reporting-ready: `fact_sales`, `fact_orders`, `dim_customer` (SCD2), `dim_product`, store dimension, inventory snapshot, `daily_revenue_mart`.
+- **Gold:** Delta; reporting-ready: `fact_orders`, `fact_sales`, `dim_customer` (SCD2), `dim_product`, `dim_store`, inventory snapshot, `daily_revenue_mart`.
 
 Tech: **Azure Databricks**, **Delta Lake**, **Unity Catalog**, **ADLS Gen2**, **Azure Key Vault**, **Azure Monitor**, **Terraform**, **GitHub Actions**, optional **Airflow** and **dbt**.
 
@@ -150,7 +153,7 @@ All workflows are **manual** (`workflow_dispatch`) unless noted.
 
 Workflows live in [.github/workflows/](.github/workflows/).
 
-**Secrets:** Databricks: `DATABRICKS_HOST`, `DATABRICKS_TOKEN`. Terraform state backend (OIDC): `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`. Promote (service principal): `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`.
+**Secrets:** Databricks: `DATABRICKS_HOST`, `DATABRICKS_TOKEN`. Terraform (OIDC): `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (used by provision-tfstate, terraform-base-dev, and terraform-databricks-dev; workflows pass them as `ARM_*` for the AzureRM provider). Promote (service principal): `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`.
 
 ---
 
