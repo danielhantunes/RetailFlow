@@ -1,6 +1,6 @@
 # RetailFlow — Enterprise Retail Data Platform
 
-Production-grade data platform for a retail company, built on **Azure Databricks** with a **medallion architecture** (RAW → BRONZE → SILVER → GOLD). Processes online orders, store sales, product catalog, inventory, customers, payments, and clickstream events for analytics, BI, and reporting.
+Production-grade data platform for a retail company, built on **Azure Databricks** with a **medallion architecture** (RAW → BRONZE → SILVER → GOLD). Gold is served to **Snowflake** for BI (e.g. Power BI). Processes online orders, store sales, product catalog, inventory, customers, payments, and clickstream events for analytics, BI, and reporting. Orchestration: **Airflow**. Transformations and marts: **dbt**.
 
 > 🚧 **This project is under active development and continuously evolving.** The current state already reflects production-oriented design decisions.
 
@@ -27,9 +27,11 @@ RetailFlow/
 ├── dlt/
 │   └── pipelines/             # Delta Live Tables: Bronze + Silver (orders)
 ├── airflow/
-│   └── dags/                  # Optional: medallion DAG (trigger Databricks job)
+│   ├── README.md
+│   └── dags/                  # Medallion orchestration (trigger Databricks job)
 ├── dbt/
-│   └── retailflow/            # Optional: marts (e.g. daily_revenue)
+│   └── retailflow/            # Marts and transformations (e.g. daily_revenue)
+│       └── models/marts/      # daily_revenue.sql, sources.yml
 ├── terraform/
 │   ├── backend/              # State backend bootstrap (RG, storage, container)
 │   ├── base/                 # Layer 1: RG, VNet, Subnets, ADLS Gen2 (retailflowdevdls: raw, bronze, silver, gold), NSGs, Private Endpoint
@@ -37,6 +39,7 @@ RetailFlow/
 │   ├── modules/              # Legacy/shared: databricks, storage, key_vault, networking
 │   ├── main.tf               # Legacy single-root (optional)
 │   ├── variables.tf
+│   ├── outputs.tf
 │   └── terraform.tfvars.example
 ├── scripts/                   # Bootstrap RAW folders, secret scope
 ├── tests/
@@ -50,7 +53,7 @@ RetailFlow/
 │   ├── REPOSITORY_TREE.md
 │   ├── UNITY_CATALOG.md
 │   └── OBSERVABILITY.md
-├── .github/workflows/         # CI/CD: provision tfstate, deploy notebooks/jobs, promote env, tests
+├── .github/workflows/         # CI/CD: provision tfstate, terraform base/databricks, deploy notebooks/jobs, promote env, tests
 ├── .gitignore
 └── README.md
 ```
@@ -64,9 +67,10 @@ RetailFlow/
 - **RAW:** ADLS Gen2; immutable; partition by `ingestion_date`; JSON/CSV/Parquet as received. Supports replay and schema evolution.
 - **Bronze:** Delta in Unity Catalog; minimal parsing, flatten JSON, audit columns (`_ingestion_ts`, `_source_file`).
 - **Silver:** Delta; cleaned, deduplicated, validated, business keys.
-- **Gold:** Delta; reporting-ready: `fact_orders`, `fact_sales`, `dim_customer` (SCD2), `dim_product`, `dim_store`, inventory snapshot, `daily_revenue_mart`.
+- **Gold:** Delta; reporting-ready: `fact_orders`, `fact_sales`, `dim_customer` (SCD2), `dim_product`, `dim_store`, inventory snapshot, `daily_revenue_mart`. Gold is synced or exposed to **Snowflake** as the serving layer for Power BI and analytics.
+- **Serving:** **Snowflake** (gold layer); Power BI, Tableau, and SQL clients consume from Snowflake.
 
-Tech: **Azure Databricks**, **Delta Lake**, **Unity Catalog**, **ADLS Gen2**, **Azure Key Vault**, **Azure Monitor**, **Terraform**, **GitHub Actions**, optional **Airflow** and **dbt**.
+Tech: **Azure Databricks**, **Delta Lake**, **Unity Catalog**, **ADLS Gen2**, **Snowflake** (gold serving), **Airflow** (orchestration), **dbt** (marts), **Azure Key Vault**, **Azure Monitor**, **Terraform**, **GitHub Actions**.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DATA_FLOW.md](docs/DATA_FLOW.md), [docs/RAW_LAYER_DESIGN.md](docs/RAW_LAYER_DESIGN.md).
 
@@ -77,8 +81,9 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DATA_FLOW.md](docs/DATA_
 1. **Ingestion** (notebooks) → RAW on ADLS (`/data/raw/orders`, `customers`, `products`, `inventory`, `clickstream`, etc.).
 2. **Bronze** notebooks/DLT read RAW → parse, add audit columns → Delta tables in Bronze schema.
 3. **Silver** reads Bronze → clean, dedupe, validate → Delta in Silver schema.
-4. **Gold** reads Silver → facts, dimensions, marts → Delta in Gold schema.
-5. **Consumption:** Power BI, Tableau, Databricks SQL on Gold (and Silver as needed).
+4. **Gold** reads Silver → facts, dimensions, marts → Delta in Gold schema (dbt + notebooks).
+5. **Serving:** Gold is synced or exposed to **Snowflake**; **Airflow** orchestrates the medallion pipeline.
+6. **Consumption:** Power BI, Tableau, and SQL clients query **Snowflake** (gold); Databricks SQL can query Gold in the lake as needed.
 
 ---
 
@@ -132,7 +137,7 @@ All workflows are **manual** (`workflow_dispatch`) unless noted.
 3. **Terraform Databricks (Dev)** — `terraform-databricks-dev.yml`  
    Run with `action: plan`, then `action: apply`. Creates workspace `retailflow-dev-dbw` (standard). Depends on base; run after step 2.
 
-4. **After infra is up (any order):** deploy notebooks (`deploy-notebooks.yml`), deploy jobs (`deploy-jobs.yml`), configure secret scope, bootstrap RAW, run pipelines, dbt, monitoring.
+4. **After infra is up (any order):** deploy notebooks (`deploy-notebooks.yml`), deploy jobs (`deploy-jobs.yml`), configure secret scope, bootstrap RAW, run Airflow DAGs, dbt marts, sync Gold to Snowflake (when configured), monitoring.
 
 **Optional:** Run **Provision Terraform State Backend (Prod)** (`provision-tfstate-prod.yml`) when you need a separate prod state backend; then use prod Terraform workflows (when added) in the same order (base → databricks).
 
@@ -181,7 +186,7 @@ See [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md).
 
 ## Next steps
 
-See [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md) for implementation checklist. **First:** run **Provision Terraform State Backend (Dev)**; then **Terraform Base (Dev)** with action `apply`; then **Terraform Databricks (Dev)** with action `apply`. After infra is up: secret scope, RAW bootstrap, run jobs, DLT, dbt, and monitoring.
+See [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md) for implementation checklist. **First:** run **Provision Terraform State Backend (Dev)**; then **Terraform Base (Dev)** with action `apply`; then **Terraform Databricks (Dev)** with action `apply`. After infra is up: secret scope, RAW bootstrap, run jobs, Airflow DAGs, DLT, dbt marts, Snowflake gold serving, and monitoring.
 
 ---
 

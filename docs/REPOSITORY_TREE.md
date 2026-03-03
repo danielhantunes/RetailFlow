@@ -4,6 +4,10 @@
 RetailFlow/
 ├── .github/
 │   └── workflows/
+│       ├── provision-tfstate-dev.yml
+│       ├── provision-tfstate-prod.yml
+│       ├── terraform-base-dev.yml
+│       ├── terraform-databricks-dev.yml
 │       ├── deploy-notebooks.yml
 │       ├── deploy-jobs.yml
 │       ├── promote-environment.yml
@@ -64,7 +68,23 @@ RetailFlow/
 │               ├── daily_revenue.sql
 │               └── sources.yml
 ├── terraform/
-│   ├── main.tf
+│   ├── backend/                  # State backend bootstrap
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   ├── outputs.tf
+│   │   ├── README.md
+│   │   └── terraform.tfvars.example
+│   ├── base/                     # Layer 1: RG, VNet, ADLS Gen2, NSGs, Private Endpoint
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   ├── outputs.tf
+│   │   └── README.md
+│   ├── databricks/               # Layer 2: Databricks workspace
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   ├── outputs.tf
+│   │   └── README.md
+│   ├── main.tf                   # Legacy single-root (optional)
 │   ├── variables.tf
 │   ├── outputs.tf
 │   ├── terraform.tfvars.example
