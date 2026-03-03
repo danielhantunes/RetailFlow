@@ -20,7 +20,7 @@ provider "azurerm" {
   features {}
 }
 
-# Read Layer 1 (base) outputs
+# Read Layer 1 (base) outputs (run Terraform Base (Dev) apply first so NSG association outputs exist)
 data "terraform_remote_state" "base" {
   backend = "azurerm"
   config = {
@@ -32,11 +32,13 @@ data "terraform_remote_state" "base" {
 }
 
 locals {
-  rg_name           = data.terraform_remote_state.base.outputs.resource_group_name
-  location          = data.terraform_remote_state.base.outputs.location
-  vnet_id           = data.terraform_remote_state.base.outputs.vnet_id
-  public_subnet_id  = data.terraform_remote_state.base.outputs.public_subnet_id
-  private_subnet_id = data.terraform_remote_state.base.outputs.private_subnet_id
+  rg_name                                    = data.terraform_remote_state.base.outputs.resource_group_name
+  location                                   = data.terraform_remote_state.base.outputs.location
+  vnet_id                                    = data.terraform_remote_state.base.outputs.vnet_id
+  public_subnet_id                           = data.terraform_remote_state.base.outputs.public_subnet_id
+  private_subnet_id                          = data.terraform_remote_state.base.outputs.private_subnet_id
+  public_subnet_nsg_association_id            = data.terraform_remote_state.base.outputs.public_subnet_network_security_group_association_id
+  private_subnet_nsg_association_id           = data.terraform_remote_state.base.outputs.private_subnet_network_security_group_association_id
 }
 
 # Azure Databricks Workspace: retailflow-dev-dbw, standard tier
@@ -47,10 +49,13 @@ resource "azurerm_databricks_workspace" "workspace" {
   sku                 = "standard"
 
   custom_parameters {
-    no_public_ip        = true
-    virtual_network_id  = local.vnet_id
-    public_subnet_name  = split("/", local.public_subnet_id)[length(split("/", local.public_subnet_id)) - 1]
-    private_subnet_name = split("/", local.private_subnet_id)[length(split("/", local.private_subnet_id)) - 1]
+    no_public_ip            = true
+    virtual_network_id      = local.vnet_id
+    public_subnet_name      = split("/", local.public_subnet_id)[length(split("/", local.public_subnet_id)) - 1]
+    private_subnet_name     = split("/", local.private_subnet_id)[length(split("/", local.private_subnet_id)) - 1]
+    # Required by Azure when using VNet injection (must run Terraform Base apply first)
+    public_subnet_network_security_group_association_id  = data.terraform_remote_state.base.outputs.public_subnet_network_security_group_association_id
+    private_subnet_network_security_group_association_id = data.terraform_remote_state.base.outputs.private_subnet_network_security_group_association_id
   }
 
   tags = var.tags

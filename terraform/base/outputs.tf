@@ -22,6 +22,14 @@ output "private_subnet_id" {
   value = azurerm_subnet.private.id
 }
 
+output "public_subnet_network_security_group_association_id" {
+  value = azurerm_subnet_network_security_group_association.public.id
+}
+
+output "private_subnet_network_security_group_association_id" {
+  value = azurerm_subnet_network_security_group_association.private.id
+}
+
 output "storage_account_name" {
   value = azurerm_storage_account.dls.name
 }
