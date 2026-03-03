@@ -32,7 +32,7 @@ RetailFlow/
 │   └── retailflow/            # Optional: marts (e.g. daily_revenue)
 ├── terraform/
 │   ├── backend/              # State backend bootstrap (RG, storage, container)
-│   ├── base/                 # Layer 1: RG, VNet, Subnets, ADLS Gen2 (retailflowdevdls), Private Endpoint
+│   ├── base/                 # Layer 1: RG, VNet, Subnets, ADLS Gen2 (retailflowdevdls: raw, bronze, silver, gold), NSGs, Private Endpoint
 │   ├── databricks/           # Layer 2: Databricks workspace only (retailflow-dev-dbw, standard)
 │   ├── modules/              # Legacy/shared: databricks, storage, key_vault, networking
 │   ├── main.tf               # Legacy single-root (optional)
@@ -111,8 +111,8 @@ Main pipeline job: [databricks/jobs/retailflow_main_job.json](databricks/jobs/re
 Infrastructure is split into **two layers** so base infra and Databricks can be managed (and destroyed) independently. We use **OIDC + GitHub Actions** for remote state and for running Terraform (no Azure client secret).
 
 - **State backend first:** Run **Provision Terraform State Backend (Dev)** (creates `retailflow-dev-tfstate-rg`, storage `retailflowdevtfstate`). Optionally run **Provision Terraform State Backend (Prod)** for prod. See [terraform/backend/README.md](terraform/backend/README.md).
-- **Layer 1 – Base (terraform/base):** Resource group, VNet, subnets, **Azure Data Lake Storage Gen2** (`retailflowdevdls`, hierarchical namespace), private endpoint. Managed by **[Terraform Base (Dev)](.github/workflows/terraform-base-dev.yml)** — action: `plan` \| `apply` \| `destroy`. State: `retailflow-dev-base.tfstate`.
-- **Layer 2 – Databricks only (terraform/databricks):** **Azure Databricks Workspace** `retailflow-dev-dbw`, **standard** tier. Depends on base (reads its state). Managed by **[Terraform Databricks (Dev)](.github/workflows/terraform-databricks-dev.yml)** — action: `plan` \| `apply` \| `destroy`. State: `retailflow-dev-databricks.tfstate`. Run base first, then this to create the workspace; use destroy on this workflow only to tear down Databricks without touching base.
+- **Layer 1 – Base (terraform/base):** Resource group, VNet, subnets (including two for Databricks with NSGs and delegation), **Azure Data Lake Storage Gen2** (`retailflowdevdls`, hierarchical namespace) with medallion containers **raw, bronze, silver, gold**, private endpoint. Managed by **[Terraform Base (Dev)](.github/workflows/terraform-base-dev.yml)** — action: `plan` \| `apply` \| `destroy`. State: `retailflow-dev-base.tfstate`.
+- **Layer 2 – Databricks only (terraform/databricks):** **Azure Databricks Workspace** `retailflow-dev-dbw`, **standard** tier. Depends on base (reads its state). Managed by **[Terraform Databricks (Dev)](.github/workflows/terraform-databricks-dev.yml)** — action: `plan` \| `apply` \| `destroy`. State: `retailflow-dev-databricks.tfstate`. **Apply order:** base first, then this. **Destroy order:** run Databricks destroy first, then base destroy.
 - **Environments:** Dev and prod only. Prod uses separate state backends and (when added) prod-specific workflows.
 
 ---
@@ -127,7 +127,7 @@ All workflows are **manual** (`workflow_dispatch`) unless noted.
    Run once. Creates `retailflow-dev-tfstate-rg`, storage account `retailflowdevtfstate`, container `tfstate`. Required before any Terraform plan/apply.
 
 2. **Terraform Base (Dev)** — `terraform-base-dev.yml`  
-   Run with `action: plan`, then `action: apply`. Creates RG, VNet, subnets, ADLS Gen2 (`retailflowdevdls`), private endpoint. Must complete before Layer 2.
+   Run with `action: plan`, then `action: apply`. Creates RG, VNet, subnets (with NSGs for Databricks), ADLS Gen2 (`retailflowdevdls`) with containers **raw, bronze, silver, gold**, private endpoint. Must complete before Layer 2.
 
 3. **Terraform Databricks (Dev)** — `terraform-databricks-dev.yml`  
    Run with `action: plan`, then `action: apply`. Creates workspace `retailflow-dev-dbw` (standard). Depends on base; run after step 2.
@@ -137,6 +137,8 @@ All workflows are **manual** (`workflow_dispatch`) unless noted.
 **Optional:** Run **Provision Terraform State Backend (Prod)** (`provision-tfstate-prod.yml`) when you need a separate prod state backend; then use prod Terraform workflows (when added) in the same order (base → databricks).
 
 **Tests:** Run `tests.yml` anytime (no dependency on infra).
+
+**Destroy (tear down all infra):** Run **Terraform Databricks (Dev)** with `action: destroy` first, then **Terraform Base (Dev)** with `action: destroy`. Order matters (Databricks depends on base).
 
 ---
 
