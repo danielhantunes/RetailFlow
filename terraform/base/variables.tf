@@ -5,9 +5,9 @@ variable "azure_region" {
 }
 
 variable "data_lake_containers" {
-  description = "ADLS Gen2 filesystem (container) names"
+  description = "ADLS Gen2 filesystem (container) names – medallion layers on retailflowdevdls"
   type        = list(string)
-  default     = ["raw", "processed"]
+  default     = ["raw", "bronze", "silver", "gold"]
 }
 
 variable "tags" {
