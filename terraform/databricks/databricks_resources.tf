@@ -12,12 +12,10 @@ data "databricks_spark_version" "latest_lts" {
   long_term_support    = true
 }
 
-# Limit to 2–4 cores so dev stays small and cost-bounded.
+# Smallest node type with local disk (provider may not support min_cores/max_cores in this version).
 data "databricks_node_type" "smallest" {
   count      = local.create_databricks_resources ? 1 : 0
   local_disk = true
-  min_cores  = 2
-  max_cores  = 4
 }
 
 # DEV: single-node cluster for development (see docs/COMPUTE_AND_COST.md).
