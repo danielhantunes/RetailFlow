@@ -22,7 +22,7 @@ RetailFlow/
 │   │   ├── silver/            # Clean, dedup, validation
 │   │   ├── gold/              # fact_orders, fact_sales, dim_customer (SCD2), dim_product, dim_store, inventory_snapshot, daily_revenue_mart
 │   │   └── observability/     # Job monitoring, logging
-│   ├── jobs/                   # Job definition JSON (RetailFlow_Main_Pipeline)
+│   ├── jobs/                   # (job provisioned via Terraform: terraform/databricks/databricks_resources.tf)
 │   └── lib/                    # Shared utilities (see lib/README.md)
 ├── dlt/
 │   └── pipelines/             # Delta Live Tables: Bronze + Silver (orders)
@@ -47,7 +47,9 @@ RetailFlow/
 │   └── requirements.txt
 ├── docs/
 │   ├── ARCHITECTURE.md
+│   ├── COMPUTE_AND_COST.md
 │   ├── DATA_FLOW.md
+│   ├── DATABRICKS_AZURE_AUTH.md
 │   ├── NEXT_STEPS.md
 │   ├── RAW_LAYER_DESIGN.md
 │   ├── REPOSITORY_TREE.md
@@ -107,7 +109,7 @@ See [databricks/notebooks/raw/01_ingest_orders_api.py](databricks/notebooks/raw/
 
 ## Example job config
 
-Main pipeline job: [databricks/jobs/retailflow_main_job.json](databricks/jobs/retailflow_main_job.json). Tasks: ingest RAW (orders, customers) → Bronze → Silver → Gold (fact_orders, dim_customer, daily_revenue_mart). Schedule: daily 02:00 UTC. Concurrency: 1. Cluster: 14.3.x, 2 workers, AQE and Delta optimize enabled.
+Main pipeline job **RetailFlow_Main_Pipeline** is defined and provisioned in Terraform: [terraform/databricks/databricks_resources.tf](terraform/databricks/databricks_resources.tf). Tasks: ingest RAW (orders, customers) → Bronze → Silver → Gold (fact_orders, dim_customer, daily_revenue_mart). Schedule: daily 02:00 UTC. Concurrency: 1. Cluster: LTS with Photon, Standard_D4as_v5, autoscale 1–2 workers, AQE and Delta optimize enabled (job cluster terminates after run). See [docs/COMPUTE_AND_COST.md](docs/COMPUTE_AND_COST.md) for DEV/PROD compute sizing and cost guidance.
 
 ---
 
@@ -117,7 +119,7 @@ Infrastructure is split into **two layers** so base infra and Databricks can be 
 
 - **State backend first:** Run **Provision Terraform State Backend (Dev)** (creates `retailflow-dev-tfstate-rg`, storage `retailflowdevtfstate`). Optionally run **Provision Terraform State Backend (Prod)** for prod. See [terraform/backend/README.md](terraform/backend/README.md).
 - **Layer 1 – Base (terraform/base):** Resource group, VNet, subnets (including two for Databricks with NSGs and delegation), **Azure Data Lake Storage Gen2** (`retailflowdevdls`, hierarchical namespace) with medallion containers **raw, bronze, silver, gold**, private endpoint. Managed by **[Terraform Base (Dev)](.github/workflows/terraform-base-dev.yml)** — action: `plan` \| `apply` \| `destroy`. State: `retailflow-dev-base.tfstate`.
-- **Layer 2 – Databricks only (terraform/databricks):** **Azure Databricks Workspace** `retailflow-dev-dbw`, **standard** tier. Depends on base (reads its state). Managed by **[Terraform Databricks (Dev)](.github/workflows/terraform-databricks-dev.yml)** — action: `plan` \| `apply` \| `destroy`. State: `retailflow-dev-databricks.tfstate`. **Apply order:** base first, then this. **Destroy order:** run Databricks destroy first, then base destroy.
+- **Layer 2 – Databricks only (terraform/databricks):** **Azure Databricks Workspace** `retailflow-dev-dbw` (standard), **dev cluster** (single-node, 30 min auto-terminate), and **main pipeline job** (RetailFlow_Main_Pipeline with job cluster 1–2 workers). Depends on base. Managed by **[Terraform Databricks (Dev)](.github/workflows/terraform-databricks-dev.yml)** — action: `plan` \| `apply` \| `destroy`. Databricks auth: **Azure AD** (mesmo SP do Azure; ver [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md)). State: `retailflow-dev-databricks.tfstate`. **Apply order:** base first, then this. **Destroy order:** run Databricks destroy first, then base destroy.
 - **Environments:** Dev and prod only. Prod uses separate state backends and (when added) prod-specific workflows.
 
 ---
@@ -135,7 +137,7 @@ All workflows are **manual** (`workflow_dispatch`) unless noted.
    Run with `action: plan`, then `action: apply`. Creates RG, VNet, subnets (with NSGs for Databricks), ADLS Gen2 (`retailflowdevdls`) with containers **raw, bronze, silver, gold**, private endpoint. Must complete before Layer 2.
 
 3. **Terraform Databricks (Dev)** — `terraform-databricks-dev.yml`  
-   Run with `action: plan`, then `action: apply`. Creates workspace `retailflow-dev-dbw` (standard). Depends on base; run after step 2.
+   Run with `action: plan`, then `action: apply`. Creates workspace `retailflow-dev-dbw`, dev cluster (`retailflow-dev-single-node`), and job `RetailFlow_Main_Pipeline`. Depends on base; run after step 2. **Secrets:** `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `ARM_CLIENT_SECRET`, `AZURE_PRINCIPAL_ID` (Object ID do SP; o Terraform concede Contributor no workspace). Ver [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md).
 
 4. **After infra is up (any order):** deploy notebooks (`deploy-notebooks.yml`), deploy jobs (`deploy-jobs.yml`), configure secret scope, bootstrap RAW, run Airflow DAGs, dbt marts, sync Gold to Snowflake (when configured), monitoring.
 
@@ -152,7 +154,7 @@ All workflows are **manual** (`workflow_dispatch`) unless noted.
 - **provision-tfstate-dev.yml:** Dev Terraform state backend. Uses **OIDC**. Run first (step 1).
 - **provision-tfstate-prod.yml:** Prod Terraform state backend. Run when you need separate prod state.
 - **terraform-base-dev.yml:** Layer 1 – base infra only. Input: `action` (plan \| apply \| destroy). Step 2.
-- **terraform-databricks-dev.yml:** Layer 2 – Databricks only. Input: `action` (plan \| apply \| destroy). Step 3.
+- **terraform-databricks-dev.yml:** Layer 2 – workspace, dev cluster, main pipeline job. Databricks: **Azure AD** (mesmo SP + `ARM_CLIENT_SECRET`). Input: `action` (plan \| apply \| destroy). Step 3.
 - **deploy-notebooks.yml:** Sync notebooks to Databricks (e.g. via Repos).
 - **deploy-jobs.yml:** Deploy/update Databricks jobs from repo.
 - **promote-environment.yml:** Promote to prod or stg (workflow offers both; config + optional Terraform).
@@ -160,7 +162,7 @@ All workflows are **manual** (`workflow_dispatch`) unless noted.
 
 Workflows live in [.github/workflows/](.github/workflows/).
 
-**Secrets:** Databricks: `DATABRICKS_HOST`, `DATABRICKS_TOKEN`. Terraform (OIDC): `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (used by provision-tfstate, terraform-base-dev, and terraform-databricks-dev; workflows pass them as `ARM_*` for the AzureRM provider). Promote (service principal): `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`.
+**Secrets:** Terraform Azure (OIDC): `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (passed as `ARM_*`). Terraform Databricks (Azure AD): mesmo app + `ARM_CLIENT_SECRET` e `AZURE_PRINCIPAL_ID` (Object ID do SP; usado para conceder Contributor no workspace via Terraform). Ver [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md). Opcional (deploy-notebooks/jobs): `DATABRICKS_HOST`, `DATABRICKS_TOKEN`. Promote: `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`.
 
 ---
 

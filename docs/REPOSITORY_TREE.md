@@ -22,8 +22,7 @@ RetailFlow/
 │   └── schemas/
 │       └── raw_orders.json
 ├── databricks/
-│   ├── jobs/
-│   │   └── retailflow_main_job.json
+│   ├── jobs/                   # (job definition in Terraform: terraform/databricks/databricks_resources.tf)
 │   ├── lib/
 │   │   └── README.md
 │   └── notebooks/
@@ -114,7 +113,9 @@ RetailFlow/
 │       └── test_ingestion_metadata.py
 └── docs/
     ├── ARCHITECTURE.md
+    ├── COMPUTE_AND_COST.md
     ├── DATA_FLOW.md
+    ├── DATABRICKS_AZURE_AUTH.md
     ├── RAW_LAYER_DESIGN.md
     ├── UNITY_CATALOG.md
     ├── OBSERVABILITY.md

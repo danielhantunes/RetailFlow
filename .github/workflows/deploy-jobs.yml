@@ -13,6 +13,5 @@ jobs:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
         run: |
-          # Use Databricks API 2.0 Jobs create/update with databricks-cli or curl
-          # job_id = $(curl -s -X POST "$DATABRICKS_HOST/api/2.0/jobs/create" -H "Authorization: Bearer $DATABRICKS_TOKEN" -d @databricks/jobs/retailflow_main_job.json | jq -r .job_id)
-          echo "Deploy job JSON via API; update notebook paths to match workspace paths"
+          # Main pipeline job (RetailFlow_Main_Pipeline) is provisioned by Terraform (terraform/databricks/databricks_resources.tf). This workflow is for optional ad-hoc job deploy via API if needed.
+          echo "Job is managed by Terraform; use terraform-databricks-dev workflow to apply/destroy."

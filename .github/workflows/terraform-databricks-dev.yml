@@ -1,6 +1,7 @@
 # Layer 2 – Databricks ONLY (dev)
-# This workflow manages ONLY Databricks resources: Azure Databricks Workspace (retailflow-dev-dbw, standard tier).
-# No base infra (RG, VNet, Storage, etc.). Depends on base; run terraform-base-dev.yml first.
+# Provisions: Azure Databricks Workspace (retailflow-dev-dbw), dev cluster (single-node), and main pipeline job.
+# Depends on base; run terraform-base-dev.yml first.
+# Databricks auth: same Azure AD Service Principal (add app to workspace; use ARM_CLIENT_SECRET for Databricks provider). See docs/DATABRICKS_AZURE_AUTH.md.
 
 name: Terraform Databricks (Dev)
 on:
@@ -26,11 +27,12 @@ concurrency:
 
 env:
   TF_VERSION: '1.5.0'
-  # AzureRM provider (OIDC)
+  # AzureRM provider (OIDC) and Databricks provider (same Azure AD SP with client secret)
   ARM_USE_OIDC: true
   ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
   ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
   ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
   # Remote state backend (dev)
   TF_BACKEND_RESOURCE_GROUP: retailflow-dev-tfstate-rg
   TF_BACKEND_STORAGE_ACCOUNT: retailflowdevtfstate
@@ -41,6 +43,8 @@ env:
   TF_VAR_tfstate_storage_account_name: retailflowdevtfstate
   TF_VAR_tfstate_container_name: tfstate
   TF_VAR_tfstate_base_key: retailflow-dev-base.tfstate
+  # Grant this SP Contributor on the workspace so it can use the Databricks API (no manual add). Set AZURE_PRINCIPAL_ID in repo secrets (Object ID of the Azure AD app).
+  TF_VAR_azure_principal_id: ${{ secrets.AZURE_PRINCIPAL_ID }}
 
 jobs:
   terraform:
@@ -86,14 +90,47 @@ jobs:
           echo "==> Running terraform plan"
           terraform plan -no-color -input=false
 
-      - name: Terraform Apply
+      - name: Terraform Apply (workspace)
         if: github.event.inputs.action == 'apply'
         run: |
-          echo "==> Applying Databricks workspace (retailflow-dev-dbw)"
+          echo "==> Applying: workspace first (job and cluster created on second apply when host is set)"
           terraform apply -auto-approve -no-color -input=false
+
+      - name: Set Databricks host and workspace resource ID from output
+        if: github.event.inputs.action == 'apply'
+        id: workspace_outputs
+        run: |
+          URL=$(terraform output -raw workspace_url 2>/dev/null || echo "")
+          RID=$(terraform output -raw workspace_id 2>/dev/null || echo "")
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "workspace_resource_id=$RID" >> $GITHUB_OUTPUT
+          echo "workspace_url=$URL" "workspace_id=$RID"
+
+      - name: Terraform Apply (job and dev cluster)
+        if: github.event.inputs.action == 'apply' && steps.workspace_outputs.outputs.url != ''
+        env:
+          TF_VAR_databricks_host: ${{ steps.workspace_outputs.outputs.url }}
+          TF_VAR_databricks_workspace_resource_id: ${{ steps.workspace_outputs.outputs.workspace_resource_id }}
+          DATABRICKS_HOST: ${{ steps.workspace_outputs.outputs.url }}
+        run: |
+          echo "==> Applying: job (RetailFlow_Main_Pipeline) and dev cluster (retailflow-dev-single-node)"
+          terraform apply -auto-approve -no-color -input=false
+
+      - name: Set Databricks host and workspace resource ID for destroy
+        if: github.event.inputs.action == 'destroy'
+        id: workspace_destroy
+        run: |
+          URL=$(terraform output -raw workspace_url 2>/dev/null || echo "")
+          RID=$(terraform output -raw workspace_id 2>/dev/null || echo "")
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "workspace_resource_id=$RID" >> $GITHUB_OUTPUT
 
       - name: Terraform Destroy
         if: github.event.inputs.action == 'destroy'
+        env:
+          TF_VAR_databricks_host: ${{ steps.workspace_destroy.outputs.url }}
+          TF_VAR_databricks_workspace_resource_id: ${{ steps.workspace_destroy.outputs.workspace_resource_id }}
+          DATABRICKS_HOST: ${{ steps.workspace_destroy.outputs.url }}
         run: |
-          echo "==> Destroying Databricks workspace"
+          echo "==> Destroying job, cluster, and workspace"
           terraform destroy -auto-approve -no-color -input=false

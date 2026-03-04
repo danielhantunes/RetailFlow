@@ -10,6 +10,10 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "~> 3.80"
     }
+    databricks = {
+      source  = "databricks/databricks"
+      version = "~> 1.40"
+    }
   }
   backend "azurerm" {
     # In CI: pass -backend-config or set via env (key=retailflow-dev-databricks.tfstate)
@@ -18,6 +22,15 @@ terraform {
 
 provider "azurerm" {
   features {}
+}
+
+# Databricks provider: authenticate with the same Azure AD Service Principal used for Azure RM (OIDC in CI).
+# Set ARM_CLIENT_ID, ARM_TENANT_ID, ARM_CLIENT_SECRET in CI; add that Azure AD app to the Databricks workspace.
+# host and azure_workspace_resource_id are set from Terraform output on second apply.
+provider "databricks" {
+  host                       = var.databricks_host != "" ? var.databricks_host : "https://placeholder.azuredatabricks.net"
+  azure_workspace_resource_id = var.databricks_workspace_resource_id != "" ? var.databricks_workspace_resource_id : null
+  auth_type                  = "azure-client-secret"
 }
 
 # Read Layer 1 (base) outputs (run Terraform Base (Dev) apply first so NSG association outputs exist)
@@ -59,4 +72,13 @@ resource "azurerm_databricks_workspace" "workspace" {
   }
 
   tags = var.tags
+}
+
+# Grant the Azure AD SP (used by CI for Databricks provider) Contributor on the workspace so it can call the Databricks API without manual "add to workspace".
+# Set azure_principal_id to the Object ID of the Azure AD app (Enterprise Application / Service Principal object ID). See docs/DATABRICKS_AZURE_AUTH.md.
+resource "azurerm_role_assignment" "databricks_workspace_contributor" {
+  count                = var.azure_principal_id != "" ? 1 : 0
+  scope                = azurerm_databricks_workspace.workspace.id
+  role_definition_name = "Contributor"
+  principal_id         = var.azure_principal_id
 }

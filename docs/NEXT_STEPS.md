@@ -26,7 +26,7 @@
 
 - Run RAW ingestion notebooks (orders, customers, products, etc.) with correct widget values or config. Validate files under RAW paths.
 - Run Bronze notebooks/DLT to populate Bronze tables; then Silver, then Gold.
-- Deploy and run the main job from `databricks/jobs/retailflow_main_job.json` (adjust notebook paths to your workspace, e.g. Repos path).
+- Run the main pipeline job (provisioned by Terraform in `terraform/databricks/databricks_resources.tf`; adjust notebook paths in Terraform if needed, e.g. Repos path).
 
 ## 6. Delta Live Tables
 
