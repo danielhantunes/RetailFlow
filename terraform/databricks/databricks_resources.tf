@@ -30,11 +30,10 @@ resource "databricks_cluster" "dev" {
 resource "databricks_job" "main_pipeline" {
   count = local.create_databricks_resources ? 1 : 0
 
-  name        = "RetailFlow_Main_Pipeline"
-  description = "RAW → Bronze → Silver → Gold for retail data platform"
-  max_retries = 0
-  timeout_seconds = 0
-  max_concurrent_runs = 1
+  name                 = "RetailFlow_Main_Pipeline"
+  description          = "RAW → Bronze → Silver → Gold for retail data platform"
+  timeout_seconds      = 0
+  max_concurrent_runs   = 1
 
   schedule {
     quartz_cron_expression = "0 0 2 * * ?"
@@ -67,7 +66,8 @@ resource "databricks_job" "main_pipeline" {
   }
 
   task {
-    task_key = "ingest_raw_orders"
+    task_key     = "ingest_raw_orders"
+    max_retries  = 0
     notebook_task {
       notebook_path = "/Workspace/Repos/retailflow/databricks/notebooks/raw/01_ingest_orders_api"
       source        = "WORKSPACE"
@@ -77,7 +77,8 @@ resource "databricks_job" "main_pipeline" {
   }
 
   task {
-    task_key = "ingest_raw_customers"
+    task_key     = "ingest_raw_customers"
+    max_retries  = 0
     notebook_task {
       notebook_path = "/Workspace/Repos/retailflow/databricks/notebooks/raw/02_ingest_customers_api"
       source        = "WORKSPACE"
@@ -87,7 +88,8 @@ resource "databricks_job" "main_pipeline" {
   }
 
   task {
-    task_key = "bronze_orders"
+    task_key    = "bronze_orders"
+    max_retries = 0
     depends_on { task_key = "ingest_raw_orders" }
     notebook_task {
       notebook_path = "/Workspace/Repos/retailflow/databricks/notebooks/bronze/01_bronze_orders"
@@ -98,7 +100,8 @@ resource "databricks_job" "main_pipeline" {
   }
 
   task {
-    task_key = "bronze_customers"
+    task_key    = "bronze_customers"
+    max_retries = 0
     depends_on { task_key = "ingest_raw_customers" }
     notebook_task {
       notebook_path = "/Workspace/Repos/retailflow/databricks/notebooks/bronze/02_bronze_customers"
@@ -109,7 +112,8 @@ resource "databricks_job" "main_pipeline" {
   }
 
   task {
-    task_key = "silver_orders"
+    task_key    = "silver_orders"
+    max_retries = 0
     depends_on { task_key = "bronze_orders" }
     notebook_task {
       notebook_path = "/Workspace/Repos/retailflow/databricks/notebooks/silver/01_silver_orders"
@@ -120,7 +124,8 @@ resource "databricks_job" "main_pipeline" {
   }
 
   task {
-    task_key = "silver_customers"
+    task_key    = "silver_customers"
+    max_retries = 0
     depends_on { task_key = "bronze_customers" }
     notebook_task {
       notebook_path = "/Workspace/Repos/retailflow/databricks/notebooks/silver/02_silver_customers"
@@ -131,7 +136,8 @@ resource "databricks_job" "main_pipeline" {
   }
 
   task {
-    task_key = "gold_fact_orders"
+    task_key    = "gold_fact_orders"
+    max_retries = 0
     depends_on { task_key = "silver_orders" }
     depends_on { task_key = "silver_customers" }
     notebook_task {
@@ -143,7 +149,8 @@ resource "databricks_job" "main_pipeline" {
   }
 
   task {
-    task_key = "gold_dim_customer"
+    task_key    = "gold_dim_customer"
+    max_retries = 0
     depends_on { task_key = "silver_customers" }
     notebook_task {
       notebook_path = "/Workspace/Repos/retailflow/databricks/notebooks/gold/03_gold_dim_customer_scd2"
@@ -154,7 +161,8 @@ resource "databricks_job" "main_pipeline" {
   }
 
   task {
-    task_key = "gold_daily_revenue"
+    task_key    = "gold_daily_revenue"
+    max_retries = 0
     depends_on { task_key = "gold_fact_orders" }
     notebook_task {
       notebook_path = "/Workspace/Repos/retailflow/databricks/notebooks/gold/05_gold_daily_revenue_mart"
