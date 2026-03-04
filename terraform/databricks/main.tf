@@ -24,13 +24,12 @@ provider "azurerm" {
   features {}
 }
 
-# Databricks provider: authenticate with the same Azure AD Service Principal used for Azure RM (OIDC in CI).
-# Set ARM_CLIENT_ID, ARM_TENANT_ID, ARM_CLIENT_SECRET in CI; add that Azure AD app to the Databricks workspace.
+# Databricks provider: use Azure CLI auth so the credential from azure/login (OIDC) in CI is used; no client secret.
 # host and azure_workspace_resource_id are set from Terraform output on second apply.
 provider "databricks" {
-  host                       = var.databricks_host != "" ? var.databricks_host : "https://placeholder.azuredatabricks.net"
-  azure_workspace_resource_id = var.databricks_workspace_resource_id != "" ? var.databricks_workspace_resource_id : null
-  auth_type                  = "azure-client-secret"
+  host                        = var.databricks_host != "" ? var.databricks_host : "https://placeholder.azuredatabricks.net"
+  azure_workspace_resource_id  = var.databricks_workspace_resource_id != "" ? var.databricks_workspace_resource_id : null
+  auth_type                   = "azure-cli"
 }
 
 # Read Layer 1 (base) outputs (run Terraform Base (Dev) apply first so NSG association outputs exist)

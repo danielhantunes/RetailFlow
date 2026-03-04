@@ -1,6 +1,6 @@
 # Databricks authentication with Azure AD (Service Principal)
 
-The **Terraform Databricks (Dev)** workflow uses the **same** Azure AD Service Principal you already use for Terraform (Azure RM). Access to the workspace is **automated via Terraform**: Terraform grants **Contributor** on the workspace resource to the SP, and identities with Contributor or Owner on the workspace resource in Azure automatically get workspace admin permission when accessing Databricks (including the API). You do not need to add the app to the workspace manually, even when running apply/destroy frequently.
+The **Terraform Databricks (Dev)** workflow uses the **same** Azure AD Service Principal you already use for Terraform (Azure RM), with **OIDC only** (no client secret). The Databricks Terraform provider uses **azure-cli** auth, so it uses the credential established by the `azure/login` step (OIDC). Access to the workspace is **automated via Terraform**: Terraform grants **Contributor** on the workspace resource to the SP, and identities with Contributor or Owner on the workspace resource in Azure automatically get workspace admin permission when accessing Databricks (including the API). You do not need to add the app to the workspace manually, even when running apply/destroy frequently.
 
 ## Steps
 
@@ -11,10 +11,8 @@ If you already use OIDC for Terraform Azure, you likely have an **App Registrati
 - **Federated credential** for GitHub Actions (issuer `https://token.actions.githubusercontent.com`, subject for your repo).
 - That app is used as `AZURE_CLIENT_ID` in GitHub secrets.
 
-For **Databricks**, the Terraform provider uses **azure-client-secret** authentication. You need a **client secret** for that same app.
+For **Databricks**, the Terraform provider uses **azure-cli** authentication, so it uses the same OIDC credential from the `azure/login` step. **No client secret** is required.
 
-- In **Azure Portal** → **Microsoft Entra ID** → **App registrations** → (your app).
-- **Certificates & secrets** → **New client secret** → copy the value (it is shown only once).
 - Note: **Application (client) ID** and **Directory (tenant) ID** (already used as `AZURE_CLIENT_ID` and `AZURE_TENANT_ID`).
 - For the workspace role assignment, you need the **Object ID** of the **Service Principal** (the Enterprise Application linked to the app): **Microsoft Entra ID** → **Enterprise applications** → find the app by name → **Object ID**. This value is the secret **`AZURE_PRINCIPAL_ID`**.
 
@@ -34,10 +32,11 @@ Under **Settings** → **Secrets and variables** → **Actions**, configure:
 
 | Secret | Description |
 |--------|-------------|
-| `AZURE_CLIENT_ID` | Application (client) ID of the app in Azure AD (already used by Terraform Azure RM). |
-| `AZURE_TENANT_ID` | Directory (tenant) ID (already used by Terraform Azure RM). |
-| `ARM_CLIENT_SECRET` | **Client secret** of the same app. Required for the Databricks provider (`azure-client-secret`). |
+| `AZURE_CLIENT_ID` | Application (client) ID of the app in Azure AD (already used by Terraform Azure RM and azure/login). |
+| `AZURE_TENANT_ID` | Directory (tenant) ID (already used by Terraform Azure RM and azure/login). |
 | `AZURE_PRINCIPAL_ID` | **Object ID** of the Service Principal (Enterprise Application) of the same app. Used by Terraform to create the role assignment (Contributor on the workspace). |
+
+**No `ARM_CLIENT_SECRET`** is needed; the Databricks provider uses **azure-cli** auth and the credential from the `azure/login` (OIDC) step.
 
 The workflow passes `AZURE_PRINCIPAL_ID` as `TF_VAR_azure_principal_id`. If this secret is not set, the role assignment will not be created and you must grant the SP access by other means (e.g. manually).
 
