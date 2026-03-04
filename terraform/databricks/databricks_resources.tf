@@ -1,17 +1,34 @@
 # Dev cluster and Jobs pipeline — created only when databricks_host is set (second apply).
-# Authenticate to Databricks via Azure AD (same SP as Azure RM; ARM_CLIENT_ID, ARM_TENANT_ID, ARM_CLIENT_SECRET). Add the app to the Databricks workspace.
+# Authenticate to Databricks via Azure AD (same SP as Azure RM). Add the app to the Databricks workspace.
 
 locals {
   create_databricks_resources = var.databricks_host != ""
 }
 
-# DEV: single-node cluster for development (see docs/COMPUTE_AND_COST.md)
+# Resolve LTS runtime and smallest node type at apply time (faster provisioning, fewer API lookups).
+# Only run when we have a real workspace host (second apply).
+data "databricks_spark_version" "latest_lts" {
+  count                = local.create_databricks_resources ? 1 : 0
+  long_term_support    = true
+}
+
+# Limit to 2–4 cores so dev stays small and cost-bounded.
+data "databricks_node_type" "smallest" {
+  count      = local.create_databricks_resources ? 1 : 0
+  local_disk = true
+  min_cores  = 2
+  max_cores  = 4
+}
+
+# DEV: single-node cluster for development (see docs/COMPUTE_AND_COST.md).
+# driver_node_type_id and data sources reduce creation time (fewer API lookups, fixed types).
 resource "databricks_cluster" "dev" {
   count = local.create_databricks_resources ? 1 : 0
 
   cluster_name            = "retailflow-dev-single-node"
-  spark_version           = "14.3.x-scala2.12"
-  node_type_id            = "Standard_D4as_v5"
+  spark_version           = data.databricks_spark_version.latest_lts[0].id
+  node_type_id            = data.databricks_node_type.smallest[0].id
+  driver_node_type_id     = data.databricks_node_type.smallest[0].id
   num_workers             = 0
   autotermination_minutes = 30
 
