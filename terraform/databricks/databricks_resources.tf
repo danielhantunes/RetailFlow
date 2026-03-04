@@ -27,7 +27,7 @@ resource "databricks_cluster" "dev" {
   spark_version           = data.databricks_spark_version.latest_lts[0].id
   node_type_id            = data.databricks_node_type.smallest[0].id
   driver_node_type_id     = data.databricks_node_type.smallest[0].id
-  num_workers             = 0
+  num_workers             = 1
   autotermination_minutes = 30
 
   spark_conf = {
