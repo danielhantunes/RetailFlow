@@ -1,27 +1,50 @@
-# Ephemeral Olist ingestion: create Azure PostgreSQL, load CSVs from ZIP, destroy PostgreSQL.
-# Uses existing Azure OIDC (AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID).
-# POSTGRES_* are taken from Terraform outputs only; do not set them in GitHub.
+# Olist ingestion: Terraform plan/apply/destroy or full run (apply → load CSVs → destroy).
+# Uses existing Azure OIDC. State in Azure (same backend as dev). POSTGRES_* from Terraform outputs only.
 
 name: Ingest Brazilian E-Commerce Public Dataset
 on:
   workflow_dispatch:
+    inputs:
+      action:
+        description: 'Terraform action or full ingest'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+          - full
+        default: plan
 
 permissions:
   id-token: write
   contents: read
 
+concurrency:
+  group: ingest-olist-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   TF_VERSION: "1.5.0"
+  ARM_USE_OIDC: true
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  # Remote state backend (same storage as dev; separate state key)
+  TF_BACKEND_RESOURCE_GROUP: retailflow-dev-tfstate-rg
+  TF_BACKEND_STORAGE_ACCOUNT: retailflowdevtfstate
+  TF_BACKEND_CONTAINER: tfstate
+  TF_BACKEND_KEY: retailflow-ingest-pg.tfstate
 
 jobs:
-  ingest-and-destroy:
-    name: Create PG → Ingest → Destroy
+  ingest:
+    name: Terraform ${{ github.event.inputs.action }}
     runs-on: ubuntu-latest
     env:
-      ARM_USE_OIDC: true
-      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: ${{ env.ARM_USE_OIDC }}
+      ARM_CLIENT_ID: ${{ env.ARM_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ env.ARM_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ env.ARM_SUBSCRIPTION_ID }}
 
     steps:
       - name: Checkout
@@ -42,13 +65,30 @@ jobs:
 
       - name: Terraform Init (PostgreSQL)
         working-directory: terraform/postgres
-        run: terraform init
+        run: |
+          echo "==> Initializing Terraform (backend: $TF_BACKEND_RESOURCE_GROUP / $TF_BACKEND_KEY)"
+          terraform init \
+            -backend-config="resource_group_name=$TF_BACKEND_RESOURCE_GROUP" \
+            -backend-config="storage_account_name=$TF_BACKEND_STORAGE_ACCOUNT" \
+            -backend-config="container_name=$TF_BACKEND_CONTAINER" \
+            -backend-config="key=$TF_BACKEND_KEY"
+
+      - name: Terraform Validate
+        working-directory: terraform/postgres
+        run: terraform validate
+
+      - name: Terraform Plan
+        if: github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply' || github.event.inputs.action == 'full'
+        working-directory: terraform/postgres
+        run: terraform plan -no-color -input=false
 
       - name: Terraform Apply (Create Azure PostgreSQL)
+        if: github.event.inputs.action == 'apply' || github.event.inputs.action == 'full'
         working-directory: terraform/postgres
         run: terraform apply -auto-approve -no-color -input=false
 
       - name: Export PostgreSQL connection from Terraform outputs
+        if: github.event.inputs.action == 'full'
         working-directory: terraform/postgres
         run: |
           echo "POSTGRES_HOST=$(terraform output -raw postgres_host)" >> $GITHUB_ENV
@@ -57,6 +97,7 @@ jobs:
           echo "POSTGRES_PASSWORD=$(terraform output -raw postgres_password)" >> $GITHUB_ENV
 
       - name: Wait for PostgreSQL to accept connections
+        if: github.event.inputs.action == 'full'
         run: |
           for i in $(seq 1 30); do
             if python3 -c "
@@ -77,12 +118,15 @@ jobs:
           done
 
       - name: Unzip dataset
+        if: github.event.inputs.action == 'full'
         run: bash scripts/unzip_dataset.sh
 
       - name: Install Python dependencies for ingestion
+        if: github.event.inputs.action == 'full'
         run: pip install -r scripts/requirements-ingest.txt
 
       - name: Create tables and load CSV (COPY)
+        if: github.event.inputs.action == 'full'
         run: python3 scripts/load_csv_to_postgres.py
         env:
           POSTGRES_HOST: ${{ env.POSTGRES_HOST }}
@@ -91,7 +135,7 @@ jobs:
           POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
           DATASET_DIR: dataset
 
-      - name: Terraform Destroy (Remove Azure PostgreSQL)
-        if: always()
+      - name: Terraform Destroy
+        if: github.event.inputs.action == 'destroy' || github.event.inputs.action == 'full'
         working-directory: terraform/postgres
         run: terraform destroy -auto-approve -no-color -input=false

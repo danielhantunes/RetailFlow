@@ -1,6 +1,5 @@
-# Ephemeral Azure PostgreSQL Flexible Server for Olist dataset ingestion
-# Created by GitHub Actions, used for CSV load, then destroyed.
-# Uses local backend; state is not persisted across workflow runs.
+# Azure PostgreSQL Flexible Server for Olist dataset ingestion
+# State stored in Azure (backend config from CI). Use plan/apply/destroy or full ingest from workflow.
 
 terraform {
   required_version = ">= 1.5.0"
@@ -14,8 +13,8 @@ terraform {
       version = "~> 3.5"
     }
   }
-  backend "local" {
-    path = "terraform.tfstate"
+  backend "azurerm" {
+    # In CI: pass -backend-config (resource_group_name, storage_account_name, container_name, key=retailflow-ingest-pg.tfstate)
   }
 }
 
