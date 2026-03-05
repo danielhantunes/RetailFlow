@@ -50,3 +50,15 @@ output "postgres_delegated_subnet_id" {
 output "postgres_private_dns_zone_id" {
   value = azurerm_private_dns_zone.postgres.id
 }
+
+# Bootstrap VM – private only (SSH via Bastion or VPN; runner reaches GitHub outbound)
+output "bootstrap_vm_private_ip" {
+  value       = azurerm_network_interface.bootstrap_vm.private_ip_address
+  description = "Private IP for SSH via Bastion or from within VNet"
+}
+
+output "bootstrap_vm_admin_password" {
+  value       = random_password.bootstrap_vm_admin.result
+  sensitive   = true
+  description = "Bootstrap VM admin password (use for SSH via Bastion and runner setup)"
+}

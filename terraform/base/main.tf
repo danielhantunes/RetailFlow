@@ -1,6 +1,6 @@
 # Layer 1 – Base Infrastructure ONLY (dev)
-# This root contains ONLY base infrastructure: Resource Group, VNet, Subnets, ADLS Gen2 (retailflowdevdls), Private Endpoint.
-# No Databricks or other compute. State: retailflow-dev-base.tfstate
+# Resource Group, VNet, Subnets, ADLS Gen2, Private Endpoint, Bootstrap VM (self-hosted runner for Olist COPY).
+# State: retailflow-dev-base.tfstate
 
 terraform {
   required_version = ">= 1.5.0"
@@ -8,6 +8,10 @@ terraform {
     azurerm = {
       source  = "hashicorp/azurerm"
       version = "~> 3.80"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.5"
     }
   }
   backend "azurerm" {
@@ -163,6 +167,99 @@ resource "azurerm_private_endpoint" "storage_blob" {
     private_connection_resource_id = azurerm_storage_account.dls.id
     is_manual_connection           = false
     subresource_names              = ["blob"]
+  }
+
+  tags = var.tags
+}
+
+# Bootstrap VM: self-hosted runner for Olist CSV → PostgreSQL COPY. Private only (same VNet as Postgres). Use Bastion or VPN to SSH.
+resource "azurerm_subnet" "bootstrap_vm" {
+  name                 = "${local.name_prefix}-bootstrap-vm"
+  resource_group_name  = azurerm_resource_group.rg.name
+  virtual_network_name = azurerm_virtual_network.vnet.name
+  address_prefixes     = ["10.139.5.0/24"]
+}
+
+resource "azurerm_network_security_group" "bootstrap_vm" {
+  name                = "${local.name_prefix}-bootstrap-vm-nsg"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  tags                = var.tags
+}
+
+# SSH from VNet only (e.g. Azure Bastion or another VM in the VNet)
+resource "azurerm_network_security_rule" "bootstrap_vm_ssh" {
+  name                        = "allow-ssh-from-vnet"
+  priority                    = 1000
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = "22"
+  source_address_prefix       = "10.139.0.0/16"
+  destination_address_prefix  = "*"
+  resource_group_name         = azurerm_resource_group.rg.name
+  network_security_group_name = azurerm_network_security_group.bootstrap_vm.name
+}
+
+resource "azurerm_network_security_rule" "bootstrap_vm_outbound" {
+  name                        = "allow-outbound"
+  priority                    = 100
+  direction                   = "Outbound"
+  access                      = "Allow"
+  protocol                    = "*"
+  source_port_range           = "*"
+  destination_port_range      = "*"
+  source_address_prefix       = "*"
+  destination_address_prefix  = "*"
+  resource_group_name         = azurerm_resource_group.rg.name
+  network_security_group_name  = azurerm_network_security_group.bootstrap_vm.name
+}
+
+resource "azurerm_subnet_network_security_group_association" "bootstrap_vm" {
+  subnet_id                 = azurerm_subnet.bootstrap_vm.id
+  network_security_group_id = azurerm_network_security_group.bootstrap_vm.id
+}
+
+resource "random_password" "bootstrap_vm_admin" {
+  length           = 20
+  special          = true
+  override_special = "!#$%&*()-_=+[]{}?:"
+}
+
+resource "azurerm_network_interface" "bootstrap_vm" {
+  name                = "${local.name_prefix}-bootstrap-vm-nic"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+
+  ip_configuration {
+    name                          = "internal"
+    subnet_id                     = azurerm_subnet.bootstrap_vm.id
+    private_ip_address_allocation = "Dynamic"
+  }
+  tags = var.tags
+}
+
+resource "azurerm_linux_virtual_machine" "bootstrap" {
+  name                            = "${local.name_prefix}-bootstrap-vm"
+  location                        = azurerm_resource_group.rg.location
+  resource_group_name             = azurerm_resource_group.rg.name
+  size                            = var.bootstrap_vm_size
+  admin_username                  = var.bootstrap_vm_admin_username
+  admin_password                  = random_password.bootstrap_vm_admin.result
+  disable_password_authentication = false
+  network_interface_ids            = [azurerm_network_interface.bootstrap_vm.id]
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+  }
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-server-jammy"
+    sku       = "22_04-lts"
+    version   = "latest"
   }
 
   tags = var.tags

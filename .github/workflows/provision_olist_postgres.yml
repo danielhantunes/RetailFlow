@@ -1,0 +1,236 @@
+# Provision PostgreSQL for Olist (plan/apply/destroy/full). Private only (base VNet).
+# full = apply + register runner + bootstrap data (no POSTGRES_* secrets needed; uses Terraform outputs).
+# Uses existing Azure OIDC and base state. Run Terraform Base (Dev) apply first.
+
+name: Provision PostgreSQL for Olist
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Terraform action or full (apply + register runner + load data)'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+          - full
+        default: plan
+      resource_group:
+        description: 'Resource group for bootstrap VM (used when action=full)'
+        required: false
+        default: 'retailflow-dev-rg'
+      vm_name:
+        description: 'Bootstrap VM name (used when action=full)'
+        required: false
+        default: 'retailflow-dev-bootstrap-vm'
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: provision-olist-pg-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TF_VERSION: "1.5.0"
+  ARM_USE_OIDC: true
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  # Remote state backend (same storage as dev; separate state key)
+  TF_BACKEND_RESOURCE_GROUP: retailflow-dev-tfstate-rg
+  TF_BACKEND_STORAGE_ACCOUNT: retailflowdevtfstate
+  TF_BACKEND_CONTAINER: tfstate
+  TF_BACKEND_KEY: retailflow-ingest-pg.tfstate
+  # Read base state (delegated subnet + private DNS). Run Terraform Base (Dev) apply first.
+  TF_VAR_tfstate_resource_group_name: retailflow-dev-tfstate-rg
+  TF_VAR_tfstate_storage_account_name: retailflowdevtfstate
+  TF_VAR_tfstate_container_name: tfstate
+  TF_VAR_tfstate_base_key: retailflow-dev-base.tfstate
+  RUNNER_VERSION: '2.321.0'
+
+jobs:
+  postgres:
+    name: Terraform ${{ github.event.inputs.action }}
+    runs-on: ubuntu-latest
+    outputs:
+      postgres_host: ${{ steps.tf-outputs.outputs.postgres_host }}
+      postgres_user: ${{ steps.tf-outputs.outputs.postgres_user }}
+      postgres_password: ${{ steps.tf-outputs.outputs.postgres_password }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Init (PostgreSQL)
+        working-directory: terraform/postgres
+        run: |
+          echo "==> Initializing Terraform (backend: $TF_BACKEND_RESOURCE_GROUP / $TF_BACKEND_KEY)"
+          terraform init \
+            -backend-config="resource_group_name=$TF_BACKEND_RESOURCE_GROUP" \
+            -backend-config="storage_account_name=$TF_BACKEND_STORAGE_ACCOUNT" \
+            -backend-config="container_name=$TF_BACKEND_CONTAINER" \
+            -backend-config="key=$TF_BACKEND_KEY"
+
+      - name: Terraform Validate
+        working-directory: terraform/postgres
+        run: terraform validate
+
+      - name: Terraform Plan
+        if: github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply' || github.event.inputs.action == 'full'
+        working-directory: terraform/postgres
+        run: terraform plan -no-color -input=false
+
+      - name: Terraform Apply (Create Azure PostgreSQL)
+        if: github.event.inputs.action == 'apply' || github.event.inputs.action == 'full'
+        working-directory: terraform/postgres
+        run: terraform apply -auto-approve -no-color -input=false
+
+      - name: Capture Terraform outputs (for full = register + bootstrap)
+        id: tf-outputs
+        if: github.event.inputs.action == 'apply' || github.event.inputs.action == 'full'
+        working-directory: terraform/postgres
+        run: |
+          echo "postgres_host=$(terraform output -raw postgres_host)" >> "$GITHUB_OUTPUT"
+          echo "postgres_user=$(terraform output -raw postgres_user)" >> "$GITHUB_OUTPUT"
+          echo "postgres_password=$(terraform output -raw postgres_password)" >> "$GITHUB_OUTPUT"
+
+      - name: Terraform Destroy
+        if: github.event.inputs.action == 'destroy'
+        working-directory: terraform/postgres
+        run: terraform destroy -auto-approve -no-color -input=false
+
+  register:
+    name: Install runner on VM
+    if: github.event.inputs.action == 'full'
+    needs: [postgres]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get runner registration token
+        id: get-token
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          if [[ -z "$GH_PAT" ]]; then
+            echo "::error::Add secret GH_PAT (PAT with repo admin) to create a registration token."
+            exit 1
+          fi
+          RES=$(curl -sSf -X POST \
+            -H "Authorization: token $GH_PAT" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runners/registration-token")
+          TOKEN=$(echo "$RES" | jq -r '.token')
+          if [[ -z "$TOKEN" || "$TOKEN" == "null" ]]; then
+            echo "::error::Failed to create registration token. Check GH_PAT has repo admin."
+            echo "$RES" | jq .
+            exit 1
+          fi
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install runner on VM (Run Command)
+        env:
+          REG_TOKEN: ${{ steps.get-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          RUNNER_VER: ${{ env.RUNNER_VERSION }}
+          RESOURCE_GROUP: ${{ github.event.inputs.resource_group }}
+          VM_NAME: ${{ github.event.inputs.vm_name }}
+        run: |
+          SCRIPT_B64=$(base64 -w0 scripts/install_github_runner.sh)
+          printf 'export RUNNER_TOKEN=%s\nexport REPO=%s\nexport RUNNER_VERSION=%s\necho %s | base64 -d | bash\n' \
+            "$(printf '%q' "$REG_TOKEN")" \
+            "$(printf '%q' "$REPO")" \
+            "$(printf '%q' "$RUNNER_VER")" \
+            "$SCRIPT_B64" > /tmp/vm_script.sh
+          OUT=$(az vm run-command invoke \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$VM_NAME" \
+            --command-id RunShellScript \
+            --scripts "$(cat /tmp/vm_script.sh)" \
+            --query 'value[0].message' -o tsv 2>/dev/null || true)
+          echo "--- VM Run Command output ---"
+          echo "$OUT"
+          echo "---"
+
+  bootstrap:
+    name: Load dataset into Postgres
+    if: github.event.inputs.action == 'full'
+    needs: [postgres, register]
+    runs-on: [self-hosted, linux]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify PostgreSQL connectivity
+        env:
+          PGHOST: ${{ needs.postgres.outputs.postgres_host }}
+          PGUSER: ${{ needs.postgres.outputs.postgres_user }}
+          PGPASSWORD: ${{ needs.postgres.outputs.postgres_password }}
+          PGDATABASE: postgres
+        run: |
+          echo "Checking connection to PostgreSQL..."
+          psql -c "SELECT 1 AS connected;" || { echo "Cannot connect to PostgreSQL. Check that the runner is in the same VNet as Postgres."; exit 1; }
+          echo "PostgreSQL connection OK."
+
+      - name: Ensure database and tables exist
+        env:
+          PGHOST: ${{ needs.postgres.outputs.postgres_host }}
+          PGUSER: ${{ needs.postgres.outputs.postgres_user }}
+          PGPASSWORD: ${{ needs.postgres.outputs.postgres_password }}
+        run: |
+          psql -d postgres -c "SELECT 1 FROM pg_database WHERE datname = 'retailflow';" -t | grep -q 1 || psql -d postgres -c "CREATE DATABASE retailflow;"
+          psql -d retailflow -f sql/create_tables.sql
+          echo "Schema ready."
+
+      - name: Prepare dataset directory
+        run: |
+          if [[ -d dataset && -n "$(ls -A dataset 2>/dev/null)" ]]; then
+            echo "Using existing dataset/ contents."
+          elif [[ -f "databaseinput/Brazilian E-Commerce Public Dataset.zip" ]]; then
+            echo "Unzipping Olist dataset and renaming to expected filenames..."
+            mkdir -p dataset
+            unzip -o -q "databaseinput/Brazilian E-Commerce Public Dataset.zip" -d dataset
+            for f in dataset/olist_*_dataset.csv; do
+              [[ -f "$f" ]] || continue
+              base=$(basename "$f" .csv)
+              base="${base#olist_}"
+              base="${base%_dataset}"
+              mv "$f" "dataset/${base}.csv" && echo "  -> ${base}.csv"
+            done
+          else
+            echo "No dataset/ or ZIP found. Add dataset/*.csv or databaseinput/Brazilian E-Commerce Public Dataset.zip"
+            exit 1
+          fi
+
+      - name: Load dataset (COPY from CSV)
+        env:
+          POSTGRES_HOST: ${{ needs.postgres.outputs.postgres_host }}
+          POSTGRES_USER: ${{ needs.postgres.outputs.postgres_user }}
+          POSTGRES_PASSWORD: ${{ needs.postgres.outputs.postgres_password }}
+          PGDATABASE: retailflow
+        run: |
+          chmod +x scripts/load_olist.sh
+          ./scripts/load_olist.sh dataset

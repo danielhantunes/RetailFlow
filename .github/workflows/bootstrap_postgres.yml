@@ -1,0 +1,161 @@
+# Register self-hosted runner on bootstrap VM and/or load Olist CSVs into PostgreSQL (standalone).
+# For apply + register + load in one run without POSTGRES_* secrets, use provision_olist_postgres.yml with action=full.
+# Prereqs: Terraform Base (Dev) applied; for register: GH_PAT. For bootstrap_only: POSTGRES_HOST, POSTGRES_USER, POSTGRES_PASSWORD.
+# Mode: full = register then load; register_only = install runner only; bootstrap_only = load data only (needs POSTGRES_* secrets).
+
+name: Bootstrap Postgres
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'What to run'
+        required: true
+        type: choice
+        options:
+          - full
+          - register_only
+          - bootstrap_only
+        default: full
+      resource_group:
+        description: 'Azure resource group (for register)'
+        required: false
+        default: 'retailflow-dev-rg'
+      vm_name:
+        description: 'Bootstrap VM name (for register)'
+        required: false
+        default: 'retailflow-dev-bootstrap-vm'
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  RUNNER_VERSION: '2.321.0'
+
+jobs:
+  register:
+    name: Install runner on VM
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip when bootstrap_only
+        if: github.event.inputs.mode == 'bootstrap_only'
+        run: echo "Skipping runner install (mode=bootstrap_only). Bootstrap job will run on self-hosted."
+
+      - name: Checkout
+        if: github.event.inputs.mode != 'bootstrap_only'
+        uses: actions/checkout@v4
+
+      - name: Get runner registration token
+        if: github.event.inputs.mode != 'bootstrap_only'
+        id: get-token
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          if [[ -z "$GH_PAT" ]]; then
+            echo "::error::Add secret GH_PAT (PAT with repo admin) to create a registration token."
+            exit 1
+          fi
+          RES=$(curl -sSf -X POST \
+            -H "Authorization: token $GH_PAT" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runners/registration-token")
+          TOKEN=$(echo "$RES" | jq -r '.token')
+          if [[ -z "$TOKEN" || "$TOKEN" == "null" ]]; then
+            echo "::error::Failed to create registration token. Check GH_PAT has repo admin."
+            echo "$RES" | jq .
+            exit 1
+          fi
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+
+      - name: Azure Login (OIDC)
+        if: github.event.inputs.mode != 'bootstrap_only'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install runner on VM (Run Command)
+        if: github.event.inputs.mode != 'bootstrap_only'
+        env:
+          REG_TOKEN: ${{ steps.get-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          RUNNER_VER: ${{ env.RUNNER_VERSION }}
+          RESOURCE_GROUP: ${{ github.event.inputs.resource_group }}
+          VM_NAME: ${{ github.event.inputs.vm_name }}
+        run: |
+          SCRIPT_B64=$(base64 -w0 scripts/install_github_runner.sh)
+          printf 'export RUNNER_TOKEN=%s\nexport REPO=%s\nexport RUNNER_VERSION=%s\necho %s | base64 -d | bash\n' \
+            "$(printf '%q' "$REG_TOKEN")" \
+            "$(printf '%q' "$REPO")" \
+            "$(printf '%q' "$RUNNER_VER")" \
+            "$SCRIPT_B64" > /tmp/vm_script.sh
+          OUT=$(az vm run-command invoke \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$VM_NAME" \
+            --command-id RunShellScript \
+            --scripts "$(cat /tmp/vm_script.sh)" \
+            --query 'value[0].message' -o tsv 2>/dev/null || true)
+          echo "--- VM Run Command output ---"
+          echo "$OUT"
+          echo "---"
+
+  bootstrap:
+    name: Load dataset into Postgres
+    needs: [register]
+    if: github.event.inputs.mode == 'full' || github.event.inputs.mode == 'bootstrap_only'
+    runs-on: [self-hosted, linux]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify PostgreSQL connectivity
+        env:
+          PGHOST: ${{ secrets.POSTGRES_HOST }}
+          PGUSER: ${{ secrets.POSTGRES_USER }}
+          PGPASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          PGDATABASE: postgres
+        run: |
+          echo "Checking connection to PostgreSQL..."
+          psql -c "SELECT 1 AS connected;" || { echo "Cannot connect to PostgreSQL. Check secrets and that the runner is in the same VNet as Postgres."; exit 1; }
+          echo "PostgreSQL connection OK."
+
+      - name: Ensure database and tables exist
+        env:
+          PGHOST: ${{ secrets.POSTGRES_HOST }}
+          PGUSER: ${{ secrets.POSTGRES_USER }}
+          PGPASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+        run: |
+          psql -d postgres -c "SELECT 1 FROM pg_database WHERE datname = 'retailflow';" -t | grep -q 1 || psql -d postgres -c "CREATE DATABASE retailflow;"
+          psql -d retailflow -f sql/create_tables.sql
+          echo "Schema ready."
+
+      - name: Prepare dataset directory
+        run: |
+          if [[ -d dataset && -n "$(ls -A dataset 2>/dev/null)" ]]; then
+            echo "Using existing dataset/ contents."
+          elif [[ -f "databaseinput/Brazilian E-Commerce Public Dataset.zip" ]]; then
+            echo "Unzipping Olist dataset and renaming to expected filenames..."
+            mkdir -p dataset
+            unzip -o -q "databaseinput/Brazilian E-Commerce Public Dataset.zip" -d dataset
+            for f in dataset/olist_*_dataset.csv; do
+              [[ -f "$f" ]] || continue
+              base=$(basename "$f" .csv)
+              base="${base#olist_}"
+              base="${base%_dataset}"
+              mv "$f" "dataset/${base}.csv" && echo "  -> ${base}.csv"
+            done
+          else
+            echo "No dataset/ or ZIP found. Add dataset/*.csv or databaseinput/Brazilian E-Commerce Public Dataset.zip"
+            exit 1
+          fi
+
+      - name: Load dataset (COPY from CSV)
+        env:
+          POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          PGDATABASE: retailflow
+        run: |
+          chmod +x scripts/load_olist.sh
+          ./scripts/load_olist.sh dataset

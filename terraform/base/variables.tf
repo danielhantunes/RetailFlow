@@ -15,3 +15,16 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+# Bootstrap VM (self-hosted runner for Olist COPY into PostgreSQL)
+variable "bootstrap_vm_size" {
+  description = "VM size for bootstrap runner (Standard_B1s for minimal cost)"
+  type        = string
+  default     = "Standard_B1s"
+}
+
+variable "bootstrap_vm_admin_username" {
+  description = "Admin username for bootstrap VM"
+  type        = string
+  default     = "azureuser"
+}

@@ -119,7 +119,7 @@ Infrastructure is split into **two layers** so base infra and Databricks can be 
 
 - **State backend first:** Run **Provision Terraform State Backend (Dev)** (creates `retailflow-dev-tfstate-rg`, storage `retailflowdevtfstate`). Optionally run **Provision Terraform State Backend (Prod)** for prod. See [terraform/backend/README.md](terraform/backend/README.md).
 - **Layer 1 – Base (terraform/base):** Resource group, VNet, subnets (including two for Databricks with NSGs and delegation), **Azure Data Lake Storage Gen2** (`retailflowdevdls`, hierarchical namespace) with medallion containers **raw, bronze, silver, gold**, private endpoint. Managed by **[Terraform Base (Dev)](.github/workflows/terraform-base-dev.yml)** — action: `plan` \| `apply` \| `destroy`. State: `retailflow-dev-base.tfstate`.
-- **Layer 2 – Databricks only (terraform/databricks):** **Azure Databricks Workspace** `retailflow-dev-dbw` (standard), **dev cluster** (single-node, 30 min auto-terminate), and **main pipeline job** (RetailFlow_Main_Pipeline with job cluster 1–2 workers). Depends on base. Managed by **[Terraform Databricks (Dev)](.github/workflows/terraform-databricks-dev.yml)** — action: `plan` \| `apply` \| `destroy`. Databricks auth: **Azure AD** (mesmo SP do Azure; ver [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md)). State: `retailflow-dev-databricks.tfstate`. **Apply order:** base first, then this. **Destroy order:** run Databricks destroy first, then base destroy.
+- **Layer 2 – Databricks only (terraform/databricks):** **Azure Databricks Workspace** `retailflow-dev-dbw` (standard), **dev cluster** (single-node, 30 min auto-terminate), and **main pipeline job** (RetailFlow_Main_Pipeline with job cluster 1–2 workers). Depends on base. Managed by **[Terraform Databricks (Dev)](.github/workflows/terraform-databricks-dev.yml)** — action: `plan` \| `apply` \| `destroy`. Databricks auth: **Azure AD** (same service principal as Azure; see [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md)). State: `retailflow-dev-databricks.tfstate`. **Apply order:** base first, then this. **Destroy order:** run Databricks destroy first, then base destroy.
 - **Environments:** Dev and prod only. Prod uses separate state backends and (when added) prod-specific workflows.
 
 ---
@@ -137,9 +137,11 @@ All workflows are **manual** (`workflow_dispatch`) unless noted.
    Run with `action: plan`, then `action: apply`. Creates RG, VNet, subnets (with NSGs for Databricks), ADLS Gen2 (`retailflowdevdls`) with containers **raw, bronze, silver, gold**, private endpoint. Must complete before Layer 2.
 
 3. **Terraform Databricks (Dev)** — `terraform-databricks-dev.yml`  
-   Run with `action: plan`, then `action: apply`. Creates workspace `retailflow-dev-dbw`, dev cluster (`retailflow-dev-single-node`), and job `RetailFlow_Main_Pipeline`. Depends on base; run after step 2. **Secrets:** `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `ARM_CLIENT_SECRET`, `AZURE_PRINCIPAL_ID` (Object ID do SP; o Terraform concede Contributor no workspace). Ver [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md).
+   Run with `action: plan`, then `action: apply`. Creates workspace `retailflow-dev-dbw`, dev cluster (`retailflow-dev-single-node`), and job `RetailFlow_Main_Pipeline`. Depends on base; run after step 2. **Secrets:** `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `ARM_CLIENT_SECRET`, `AZURE_PRINCIPAL_ID` (Object ID of the service principal; Terraform grants Contributor on the workspace). See [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md).
 
 4. **After infra is up (any order):** deploy notebooks (`deploy-notebooks.yml`), deploy jobs (`deploy-jobs.yml`), configure secret scope, bootstrap RAW, run Airflow DAGs, dbt marts, sync Gold to Snowflake (when configured), monitoring.
+
+**Olist PostgreSQL (optional):** Add the repository secret **`GH_PAT`** (GitHub Personal Access Token with Actions read/write or repo admin) — used to create a runner registration token when registering the self-hosted runner. To create Postgres and load the Brazilian E-Commerce dataset in one run (no manual `POSTGRES_*` secrets): use **Provision PostgreSQL for Olist** (`provision_olist_postgres.yml`) with **`action: full`**. That applies Terraform, registers the self-hosted runner on the VM, and loads CSVs using connection details from Terraform outputs. For plan/apply/destroy only, use `action: plan` / `apply` / `destroy`. To only register the runner or only reload data later, use **Bootstrap Postgres** (`bootstrap_postgres.yml`) with `mode: register_only` or `mode: bootstrap_only` (bootstrap_only requires `POSTGRES_*` secrets when run standalone).
 
 **Optional:** Run **Provision Terraform State Backend (Prod)** (`provision-tfstate-prod.yml`) when you need a separate prod state backend; then use prod Terraform workflows (when added) in the same order (base → databricks).
 
@@ -154,15 +156,17 @@ All workflows are **manual** (`workflow_dispatch`) unless noted.
 - **provision-tfstate-dev.yml:** Dev Terraform state backend. Uses **OIDC**. Run first (step 1).
 - **provision-tfstate-prod.yml:** Prod Terraform state backend. Run when you need separate prod state.
 - **terraform-base-dev.yml:** Layer 1 – base infra only. Input: `action` (plan \| apply \| destroy). Step 2.
-- **terraform-databricks-dev.yml:** Layer 2 – workspace, dev cluster, main pipeline job. Databricks: **Azure AD** (mesmo SP + `ARM_CLIENT_SECRET`). Input: `action` (plan \| apply \| destroy). Step 3.
+- **terraform-databricks-dev.yml:** Layer 2 – workspace, dev cluster, main pipeline job. Databricks: **Azure AD** (same service principal + `ARM_CLIENT_SECRET`). Input: `action` (plan \| apply \| destroy). Step 3.
 - **deploy-notebooks.yml:** Sync notebooks to Databricks (e.g. via Repos).
 - **deploy-jobs.yml:** Deploy/update Databricks jobs from repo.
 - **promote-environment.yml:** Promote to prod or stg (workflow offers both; config + optional Terraform).
 - **tests.yml:** Pytest unit tests + Ruff lint.
+- **provision_olist_postgres.yml:** Create/destroy private Azure PostgreSQL (plan \| apply \| destroy \| **full**). **full** = apply + register runner + load data (no `POSTGRES_*` secrets; uses Terraform outputs). Run after Terraform Base (Dev). Needs **GH_PAT** for full.
+- **bootstrap_postgres.yml:** Standalone register runner and/or load data. **mode:** `full` (register + load), `register_only`, `bootstrap_only`. Requires **GH_PAT** for register (full / register_only). For load-only (bootstrap_only), set **POSTGRES_HOST**, **POSTGRES_USER**, **POSTGRES_PASSWORD** secrets.
 
 Workflows live in [.github/workflows/](.github/workflows/).
 
-**Secrets:** Terraform Azure (OIDC): `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (passed as `ARM_*`). Terraform Databricks (Azure AD): mesmo app + `ARM_CLIENT_SECRET` e `AZURE_PRINCIPAL_ID` (Object ID do SP; usado para conceder Contributor no workspace via Terraform). Ver [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md). Opcional (deploy-notebooks/jobs): `DATABRICKS_HOST`, `DATABRICKS_TOKEN`. Promote: `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`.
+**Secrets:** Terraform Azure (OIDC): `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (passed as `ARM_*`). Terraform Databricks (Azure AD): same app + `ARM_CLIENT_SECRET` and `AZURE_PRINCIPAL_ID` (Object ID of the service principal; used to grant Contributor on the workspace via Terraform). See [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md). Optional (deploy-notebooks/jobs): `DATABRICKS_HOST`, `DATABRICKS_TOKEN`. Promote: `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`. **Olist / self-hosted runner:** Add repository secret **`GH_PAT`** (GitHub PAT with Actions or repo admin) — required for Provision Olist `action=full` and for Bootstrap Postgres when registering the runner. **Bootstrap Postgres** (standalone load only): `POSTGRES_HOST`, `POSTGRES_USER`, `POSTGRES_PASSWORD` (not needed when using provision with action=full).
 
 ---
 
