@@ -1,3 +1,25 @@
+variable "tfstate_resource_group_name" {
+  description = "Resource group of Terraform state storage (for reading base state). Run Terraform Base (Dev) apply first."
+  type        = string
+}
+
+variable "tfstate_storage_account_name" {
+  description = "Storage account name for Terraform state (base layer)"
+  type        = string
+}
+
+variable "tfstate_container_name" {
+  description = "Container name for Terraform state"
+  type        = string
+  default     = "tfstate"
+}
+
+variable "tfstate_base_key" {
+  description = "State file key for base layer (e.g. retailflow-dev-base.tfstate)"
+  type        = string
+  default     = "retailflow-dev-base.tfstate"
+}
+
 variable "azure_region" {
   description = "Azure region for PostgreSQL Flexible Server"
   type        = string

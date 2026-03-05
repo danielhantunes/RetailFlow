@@ -22,6 +22,17 @@ provider "azurerm" {
   features {}
 }
 
+# Read base layer state for delegated subnet + private DNS (required). Run Terraform Base (Dev) apply first.
+data "terraform_remote_state" "base" {
+  backend = "azurerm"
+  config = {
+    resource_group_name  = var.tfstate_resource_group_name
+    storage_account_name = var.tfstate_storage_account_name
+    container_name       = var.tfstate_container_name
+    key                  = var.tfstate_base_key
+  }
+}
+
 resource "random_password" "postgres_admin" {
   length           = 24
   special          = true
@@ -43,20 +54,14 @@ resource "azurerm_postgresql_flexible_server" "main" {
   administrator_password = random_password.postgres_admin.result
   sku_name               = var.sku_name
   storage_mb             = var.storage_mb
-  zone                   = var.zone
+  zone = var.zone
 
-  public_network_access_enabled = true
+  # Private only: delegated subnet + private DNS from base (same VNet as Databricks). No public IP.
+  delegated_subnet_id           = data.terraform_remote_state.base.outputs.postgres_delegated_subnet_id
+  private_dns_zone_id           = data.terraform_remote_state.base.outputs.postgres_private_dns_zone_id
+  public_network_access_enabled = false
 
   tags = var.tags
 }
 
-# Allow all IPv4 for ephemeral CI (GitHub Actions runners); destroy removes the server.
-resource "azurerm_postgresql_flexible_server_firewall_rule" "allow_all" {
-  name             = "allow-all-ip"
-  server_id        = azurerm_postgresql_flexible_server.main.id
-  start_ip_address = "0.0.0.0"
-  end_ip_address   = "255.255.255.255"
-}
-
-# Database "retailflow" is created by the ingestion workflow (psql/Python) after apply.
-# Terraform only provisions the server; default DB is "postgres".
+# Database "retailflow" is created by ingestion. Run ingestion from Databricks (same VNet).

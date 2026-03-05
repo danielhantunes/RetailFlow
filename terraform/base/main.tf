@@ -103,6 +103,35 @@ resource "azurerm_subnet" "private_endpoints" {
   address_prefixes     = ["10.139.3.0/24"]
 }
 
+# Subnet for PostgreSQL Flexible Server (VNet integration / private only). Used by terraform/postgres for Olist ingest.
+resource "azurerm_subnet" "postgres" {
+  name                 = "${local.name_prefix}-postgres"
+  resource_group_name  = azurerm_resource_group.rg.name
+  virtual_network_name = azurerm_virtual_network.vnet.name
+  address_prefixes     = ["10.139.4.0/24"]
+
+  delegation {
+    name = "postgres"
+    service_delegation {
+      name    = "Microsoft.DBforPostgreSQL/flexibleServers"
+      actions = ["Microsoft.Network/virtualNetworks/subnets/join/action"]
+    }
+  }
+}
+
+# Private DNS zone for PostgreSQL Flexible Server so Databricks (same VNet) can resolve server FQDN to private IP.
+resource "azurerm_private_dns_zone" "postgres" {
+  name                = "privatelink.postgres.database.azure.com"
+  resource_group_name  = azurerm_resource_group.rg.name
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "postgres" {
+  name                  = "${local.name_prefix}-postgres-dns-link"
+  resource_group_name   = azurerm_resource_group.rg.name
+  private_dns_zone_name = azurerm_private_dns_zone.postgres.name
+  virtual_network_id   = azurerm_virtual_network.vnet.id
+}
+
 # Azure Data Lake Storage Gen2 (name: retailflowdevdls, hierarchical namespace)
 resource "azurerm_storage_account" "dls" {
   name                     = "retailflowdevdls"
