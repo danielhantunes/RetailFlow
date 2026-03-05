@@ -1,0 +1,97 @@
+# Ephemeral Olist ingestion: create Azure PostgreSQL, load CSVs from ZIP, destroy PostgreSQL.
+# Uses existing Azure OIDC (AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID).
+# POSTGRES_* are taken from Terraform outputs only; do not set them in GitHub.
+
+name: Ingest Olist Dataset (Ephemeral PostgreSQL)
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  TF_VERSION: "1.5.0"
+
+jobs:
+  ingest-and-destroy:
+    name: Create PG → Ingest → Destroy
+    runs-on: ubuntu-latest
+    env:
+      ARM_USE_OIDC: true
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Init (PostgreSQL)
+        working-directory: terraform/postgres
+        run: terraform init
+
+      - name: Terraform Apply (Create Azure PostgreSQL)
+        working-directory: terraform/postgres
+        run: terraform apply -auto-approve -no-color -input=false
+
+      - name: Export PostgreSQL connection from Terraform outputs
+        working-directory: terraform/postgres
+        run: |
+          echo "POSTGRES_HOST=$(terraform output -raw postgres_host)" >> $GITHUB_ENV
+          echo "POSTGRES_DB=$(terraform output -raw postgres_db)" >> $GITHUB_ENV
+          echo "POSTGRES_USER=$(terraform output -raw postgres_user)" >> $GITHUB_ENV
+          echo "POSTGRES_PASSWORD=$(terraform output -raw postgres_password)" >> $GITHUB_ENV
+
+      - name: Wait for PostgreSQL to accept connections
+        run: |
+          for i in $(seq 1 30); do
+            if python3 -c "
+import os, sys
+import socket
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.settimeout(5)
+try:
+  host = os.environ['POSTGRES_HOST']
+  s.connect((host, 5432))
+  s.close()
+  sys.exit(0)
+except Exception:
+  sys.exit(1)
+" 2>/dev/null; then echo "PostgreSQL is reachable"; break; fi
+            echo "Waiting for PostgreSQL... ($i/30)"
+            sleep 10
+          done
+
+      - name: Unzip dataset
+        run: bash scripts/unzip_dataset.sh
+
+      - name: Install Python dependencies for ingestion
+        run: pip install -r scripts/requirements-ingest.txt
+
+      - name: Create tables and load CSV (COPY)
+        run: python3 scripts/load_csv_to_postgres.py
+        env:
+          POSTGRES_HOST: ${{ env.POSTGRES_HOST }}
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          DATASET_DIR: dataset
+
+      - name: Terraform Destroy (Remove Azure PostgreSQL)
+        if: always()
+        working-directory: terraform/postgres
+        run: terraform destroy -auto-approve -no-color -input=false

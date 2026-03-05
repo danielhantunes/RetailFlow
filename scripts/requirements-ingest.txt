@@ -1,0 +1,2 @@
+# Dependencies for Olist CSV ingestion (load_csv_to_postgres.py)
+psycopg2-binary>=2.9.0
