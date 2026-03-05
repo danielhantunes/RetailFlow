@@ -2,7 +2,7 @@
 # Uses existing Azure OIDC (AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID).
 # POSTGRES_* are taken from Terraform outputs only; do not set them in GitHub.
 
-name: Ingest Olist Dataset (Ephemeral PostgreSQL)
+name: Ingest Brazilian E-Commerce Public Dataset
 on:
   workflow_dispatch:
 
