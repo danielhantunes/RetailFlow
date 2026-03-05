@@ -1,13 +1,14 @@
-# Provision PostgreSQL for Olist (plan/apply/destroy/full). Private only (base VNet).
-# full = apply + register runner + bootstrap data (no POSTGRES_* secrets needed; uses Terraform outputs).
-# Uses existing Azure OIDC and base state. Run Terraform Base (Dev) apply first.
+# Single workflow for Olist PostgreSQL: Terraform (plan/apply/destroy), register runner, and load data.
+# action: plan | apply | destroy | full (apply + register + load) | register_only | bootstrap_only.
+# full and bootstrap_only = no POSTGRES_* secrets (connection from Terraform state/outputs). Optional: set POSTGRES_* if state unavailable.
+# Sequence: plan -> apply -> register_only -> bootstrap_only -> destroy. Run Terraform Base (Dev) apply first. GH_PAT for full and register_only.
 
 name: Provision PostgreSQL for Olist
 on:
   workflow_dispatch:
     inputs:
       action:
-        description: 'Terraform action or full (apply + register runner + load data)'
+        description: 'What to run'
         required: true
         type: choice
         options:
@@ -15,13 +16,15 @@ on:
           - apply
           - destroy
           - full
+          - register_only
+          - bootstrap_only
         default: plan
       resource_group:
-        description: 'Resource group for bootstrap VM (used when action=full)'
+        description: 'Resource group for bootstrap VM (register/full)'
         required: false
         default: 'retailflow-dev-rg'
       vm_name:
-        description: 'Bootstrap VM name (used when action=full)'
+        description: 'Bootstrap VM name (register/full)'
         required: false
         default: 'retailflow-dev-bootstrap-vm'
 
@@ -60,10 +63,16 @@ jobs:
       postgres_user: ${{ steps.tf-outputs.outputs.postgres_user }}
       postgres_password: ${{ steps.tf-outputs.outputs.postgres_password }}
     steps:
+      - name: Skip Terraform (register_only)
+        if: github.event.inputs.action == 'register_only'
+        run: echo "Skipping Terraform. Register job will run."
+
       - name: Checkout
+        if: github.event.inputs.action != 'register_only'
         uses: actions/checkout@v4
 
       - name: Azure Login (OIDC)
+        if: github.event.inputs.action != 'register_only'
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -71,12 +80,14 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Setup Terraform
+        if: github.event.inputs.action != 'register_only'
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
           terraform_wrapper: false
 
       - name: Terraform Init (PostgreSQL)
+        if: github.event.inputs.action != 'register_only'
         working-directory: terraform/postgres
         run: |
           echo "==> Initializing Terraform (backend: $TF_BACKEND_RESOURCE_GROUP / $TF_BACKEND_KEY)"
@@ -87,11 +98,12 @@ jobs:
             -backend-config="key=$TF_BACKEND_KEY"
 
       - name: Terraform Validate
+        if: github.event.inputs.action != 'register_only' && github.event.inputs.action != 'bootstrap_only'
         working-directory: terraform/postgres
         run: terraform validate
 
       - name: Terraform Plan
-        if: github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply' || github.event.inputs.action == 'full'
+        if: github.event.inputs.action != 'register_only' && github.event.inputs.action != 'bootstrap_only' && (github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply' || github.event.inputs.action == 'full')
         working-directory: terraform/postgres
         run: terraform plan -no-color -input=false
 
@@ -100,9 +112,9 @@ jobs:
         working-directory: terraform/postgres
         run: terraform apply -auto-approve -no-color -input=false
 
-      - name: Capture Terraform outputs (for full = register + bootstrap)
+      - name: Capture Terraform outputs (full = after apply; bootstrap_only = from state)
         id: tf-outputs
-        if: github.event.inputs.action == 'apply' || github.event.inputs.action == 'full'
+        if: github.event.inputs.action == 'apply' || github.event.inputs.action == 'full' || github.event.inputs.action == 'bootstrap_only'
         working-directory: terraform/postgres
         run: |
           echo "postgres_host=$(terraform output -raw postgres_host)" >> "$GITHUB_OUTPUT"
@@ -116,14 +128,20 @@ jobs:
 
   register:
     name: Install runner on VM
-    if: github.event.inputs.action == 'full'
+    if: github.event.inputs.action == 'full' || github.event.inputs.action == 'register_only' || github.event.inputs.action == 'bootstrap_only'
     needs: [postgres]
     runs-on: ubuntu-latest
     steps:
+      - name: Skip (bootstrap_only)
+        if: github.event.inputs.action == 'bootstrap_only'
+        run: echo "Skipping runner install. Bootstrap job will use connection from Terraform state."
+
       - name: Checkout
+        if: github.event.inputs.action != 'bootstrap_only'
         uses: actions/checkout@v4
 
       - name: Get runner registration token
+        if: github.event.inputs.action != 'bootstrap_only'
         id: get-token
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
@@ -145,6 +163,7 @@ jobs:
           echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
 
       - name: Azure Login (OIDC)
+        if: github.event.inputs.action != 'bootstrap_only'
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -152,6 +171,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Install runner on VM (Run Command)
+        if: github.event.inputs.action != 'bootstrap_only'
         env:
           REG_TOKEN: ${{ steps.get-token.outputs.token }}
           REPO: ${{ github.repository }}
@@ -177,29 +197,40 @@ jobs:
 
   bootstrap:
     name: Load dataset into Postgres
-    if: github.event.inputs.action == 'full'
+    if: github.event.inputs.action == 'full' || github.event.inputs.action == 'bootstrap_only'
     needs: [postgres, register]
     runs-on: [self-hosted, linux]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Verify PostgreSQL connectivity
+      - name: Set connection (from Terraform state/outputs or secrets)
         env:
-          PGHOST: ${{ needs.postgres.outputs.postgres_host }}
-          PGUSER: ${{ needs.postgres.outputs.postgres_user }}
-          PGPASSWORD: ${{ needs.postgres.outputs.postgres_password }}
-          PGDATABASE: postgres
+          OUT_HOST: ${{ needs.postgres.outputs.postgres_host }}
+          OUT_USER: ${{ needs.postgres.outputs.postgres_user }}
+          OUT_PASS: ${{ needs.postgres.outputs.postgres_password }}
+          SECRET_HOST: ${{ secrets.POSTGRES_HOST }}
+          SECRET_USER: ${{ secrets.POSTGRES_USER }}
+          SECRET_PASS: ${{ secrets.POSTGRES_PASSWORD }}
+        run: |
+          if [ -n "$OUT_HOST" ]; then
+            echo "PGHOST=$OUT_HOST" >> "$GITHUB_ENV"
+            echo "PGUSER=$OUT_USER" >> "$GITHUB_ENV"
+            echo "PGPASSWORD=$OUT_PASS" >> "$GITHUB_ENV"
+          else
+            echo "PGHOST=$SECRET_HOST" >> "$GITHUB_ENV"
+            echo "PGUSER=$SECRET_USER" >> "$GITHUB_ENV"
+            echo "PGPASSWORD=$SECRET_PASS" >> "$GITHUB_ENV"
+          fi
+          echo "PGDATABASE=postgres" >> "$GITHUB_ENV"
+
+      - name: Verify PostgreSQL connectivity
         run: |
           echo "Checking connection to PostgreSQL..."
-          psql -c "SELECT 1 AS connected;" || { echo "Cannot connect to PostgreSQL. Check that the runner is in the same VNet as Postgres."; exit 1; }
+          psql -c "SELECT 1 AS connected;" || { echo "Cannot connect to PostgreSQL. Check runner is in the same VNet as Postgres. For bootstrap_only, run apply first so state has outputs; or set POSTGRES_* secrets."; exit 1; }
           echo "PostgreSQL connection OK."
 
       - name: Ensure database and tables exist
-        env:
-          PGHOST: ${{ needs.postgres.outputs.postgres_host }}
-          PGUSER: ${{ needs.postgres.outputs.postgres_user }}
-          PGPASSWORD: ${{ needs.postgres.outputs.postgres_password }}
         run: |
           psql -d postgres -c "SELECT 1 FROM pg_database WHERE datname = 'retailflow';" -t | grep -q 1 || psql -d postgres -c "CREATE DATABASE retailflow;"
           psql -d retailflow -f sql/create_tables.sql
@@ -227,9 +258,9 @@ jobs:
 
       - name: Load dataset (COPY from CSV)
         env:
-          POSTGRES_HOST: ${{ needs.postgres.outputs.postgres_host }}
-          POSTGRES_USER: ${{ needs.postgres.outputs.postgres_user }}
-          POSTGRES_PASSWORD: ${{ needs.postgres.outputs.postgres_password }}
+          POSTGRES_HOST: ${{ env.PGHOST }}
+          POSTGRES_USER: ${{ env.PGUSER }}
+          POSTGRES_PASSWORD: ${{ env.PGPASSWORD }}
           PGDATABASE: retailflow
         run: |
           chmod +x scripts/load_olist.sh
