@@ -2,7 +2,7 @@
 
 ## 1. Terraform
 
-- **State backend (OIDC + GitHub Actions):** Provision the Terraform remote state first. In GitHub, configure OIDC (federated credential in Azure AD + secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`). Run **Provision Terraform State Backend (Dev)** to create the dev backend (`retailflowdevtfstate`); run **Provision Terraform State Backend (Prod)** to create the prod backend (`retailflowprodtfstate`). Configure the main root’s backend from the workflow output (`terraform output backend_config`) or see [terraform/backend/README.md](../terraform/backend/README.md).
+- **State backend (OIDC + GitHub Actions):** Provision the Terraform remote state first. In GitHub, configure OIDC (federated credential in Azure AD + secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`). Run **Provision Terraform State Backend (Dev)** to create the dev backend (`retailflowdevtfstate`); run **Provision Terraform State Backend (Prod)** to create the prod backend (`retailflowprodtfstate`). Then run **Terraform Base (Dev)** (plan → apply), then **Terraform Databricks (Dev)** (plan → apply). See [README — CI/CD](../README.md#cicd-github-actions) for order. Configure the main root’s backend from the workflow output (`terraform output backend_config`) or see [terraform/backend/README.md](../terraform/backend/README.md).
 - Copy `terraform/terraform.tfvars.example` to `terraform/terraform.tfvars` and set `environment`, `azure_region`, and optionally `create_networking`.
 - Run `terraform init` with backend config (from provision workflow output), then `terraform plan`, `terraform apply` for dev. For prod, use prod backend config and prod tfvars (separate state in `retailflowprodtfstate`).
 - Note: Storage module expects `databricks_workspace_principal_id` for role assignment; if the workspace does not expose `storage_identity`, assign Storage Blob Data Contributor to the workspace identity manually in Azure Portal.
@@ -43,6 +43,7 @@
 ## 9. CI/CD
 
 - In GitHub, add secrets: `DATABRICKS_HOST`, `DATABRICKS_TOKEN`. For **Terraform state backend (OIDC):** `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (no client secret). For environment promotion: `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`; optionally use GitHub Environments (stg, prod).
+- **Optional Olist PostgreSQL:** Run **Provision PostgreSQL for Olist** (`provision_olist_postgres.yml`) after Terraform Base (Dev). Add secret **`GH_PAT`** (GitHub PAT with Actions or repo admin) for runner registration when using `action: full` or `register_only`. Sequence: plan → apply → register_only → bootstrap_only → destroy. See [README — CI/CD](../README.md#cicd-github-actions).
 - Adjust deploy workflows to your repo structure (e.g. Repos repo ID for notebook sync).
 
 ## 10. Observability

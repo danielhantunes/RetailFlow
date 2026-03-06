@@ -34,14 +34,17 @@ RetailFlow/
 │       └── models/marts/      # daily_revenue.sql, sources.yml
 ├── terraform/
 │   ├── backend/              # State backend bootstrap (RG, storage, container)
-│   ├── base/                 # Layer 1: RG, VNet, Subnets, ADLS Gen2 (retailflowdevdls: raw, bronze, silver, gold), NSGs, Private Endpoint
-│   ├── databricks/           # Layer 2: Databricks workspace only (retailflow-dev-dbw, standard)
+│   ├── base/                 # Layer 1: RG, VNet, subnets (Databricks, Postgres, bootstrap VM), ADLS Gen2, NSGs
+│   ├── databricks/           # Layer 2: Databricks workspace (retailflow-dev-dbw, standard)
+│   ├── postgres/             # Optional: Olist PostgreSQL Flexible Server (private, base VNet)
 │   ├── modules/              # Legacy/shared: databricks, storage, key_vault, networking
 │   ├── main.tf               # Legacy single-root (optional)
 │   ├── variables.tf
 │   ├── outputs.tf
 │   └── terraform.tfvars.example
-├── scripts/                   # Bootstrap RAW folders, secret scope
+├── sql/                       # Olist table DDL (create_tables.sql)
+├── databaseinput/            # Brazilian E-Commerce (Olist) dataset ZIP
+├── scripts/                   # Bootstrap RAW, secret scope, Olist runner install & load (load_olist.sh, install_github_runner.sh)
 ├── tests/
 │   ├── unit/
 │   └── requirements.txt
@@ -118,8 +121,9 @@ Main pipeline job **RetailFlow_Main_Pipeline** is defined and provisioned in Ter
 Infrastructure is split into **two layers** so base infra and Databricks can be managed (and destroyed) independently. We use **OIDC + GitHub Actions** for remote state and for running Terraform (no Azure client secret).
 
 - **State backend first:** Run **Provision Terraform State Backend (Dev)** (creates `retailflow-dev-tfstate-rg`, storage `retailflowdevtfstate`). Optionally run **Provision Terraform State Backend (Prod)** for prod. See [terraform/backend/README.md](terraform/backend/README.md).
-- **Layer 1 – Base (terraform/base):** Resource group, VNet, subnets (including two for Databricks with NSGs and delegation), **Azure Data Lake Storage Gen2** (`retailflowdevdls`, hierarchical namespace) with medallion containers **raw, bronze, silver, gold**, private endpoint. Managed by **[Terraform Base (Dev)](.github/workflows/terraform-base-dev.yml)** — action: `plan` \| `apply` \| `destroy`. State: `retailflow-dev-base.tfstate`.
+- **Layer 1 – Base (terraform/base):** Resource group, VNet, subnets (Databricks, optional Postgres delegated subnet, bootstrap VM), **Azure Data Lake Storage Gen2** (`retailflowdevdls`) with containers **raw, bronze, silver, gold**, private endpoint. Managed by **[Terraform Base (Dev)](.github/workflows/terraform-base-dev.yml)** — action: `plan` \| `apply` \| `destroy`. State: `retailflow-dev-base.tfstate`.
 - **Layer 2 – Databricks only (terraform/databricks):** **Azure Databricks Workspace** `retailflow-dev-dbw` (standard), **dev cluster** (single-node, 30 min auto-terminate), and **main pipeline job** (RetailFlow_Main_Pipeline with job cluster 1–2 workers). Depends on base. Managed by **[Terraform Databricks (Dev)](.github/workflows/terraform-databricks-dev.yml)** — action: `plan` \| `apply` \| `destroy`. Databricks auth: **Azure AD** (same service principal as Azure; see [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md)). State: `retailflow-dev-databricks.tfstate`. **Apply order:** base first, then this. **Destroy order:** run Databricks destroy first, then base destroy.
+- **Optional – Olist PostgreSQL (terraform/postgres):** Private Azure Database for PostgreSQL Flexible Server in base VNet; bootstrap VM runner loads Brazilian E-Commerce (Olist) CSVs via `provision_olist_postgres.yml`. State: `retailflow-ingest-pg.tfstate`. Run after base.
 - **Environments:** Dev and prod only. Prod uses separate state backends and (when added) prod-specific workflows.
 
 ---
@@ -147,7 +151,7 @@ All workflows are **manual** (`workflow_dispatch`) unless noted.
 
 **Tests:** Run `tests.yml` anytime (no dependency on infra).
 
-**Destroy (tear down all infra):** Run **Terraform Databricks (Dev)** with `action: destroy` first, then **Terraform Base (Dev)** with `action: destroy`. Order matters (Databricks depends on base).
+**Destroy (tear down all infra):** Run **Terraform Databricks (Dev)** with `action: destroy` first, then **Terraform Base (Dev)** with `action: destroy`. Order matters (Databricks depends on base). To remove Olist Postgres only, run **Provision PostgreSQL for Olist** with `action: destroy`.
 
 ---
 

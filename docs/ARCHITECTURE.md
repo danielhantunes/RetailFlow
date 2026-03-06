@@ -85,7 +85,7 @@ RetailFlow is an enterprise data platform for a retail company, built on **Azure
 ## Security & Governance
 
 - **Unity Catalog:** Catalog per environment (e.g. `retailflow_dev`, `retailflow_prod`); schemas per layer (raw, bronze, silver, gold).
-- **Roles:** `raw_ingestion`, `bronze_reader`, `silver_reader`, `gold_reader`, `analytics`, `admin`; least privilege.
+- **Roles:** `raw_ingestion`, `bronze_reader`, `silver_reader`, `gold_reader`, `analytics`, `platform_admin`; least privilege.
 - **Secrets:** API keys, DB credentials in Key Vault; Databricks secret scope references Key Vault.
 - **Networking:** VNet injection placeholders in Terraform; private endpoints for storage and Databricks.
 

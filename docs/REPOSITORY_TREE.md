@@ -8,6 +8,7 @@ RetailFlow/
 │       ├── provision-tfstate-prod.yml
 │       ├── terraform-base-dev.yml
 │       ├── terraform-databricks-dev.yml
+│       ├── provision_olist_postgres.yml   # Optional: Olist PostgreSQL (plan/apply/destroy/full/register_only/bootstrap_only)
 │       ├── deploy-notebooks.yml
 │       ├── deploy-jobs.yml
 │       ├── promote-environment.yml
@@ -66,6 +67,9 @@ RetailFlow/
 │           └── marts/
 │               ├── daily_revenue.sql
 │               └── sources.yml
+├── databaseinput/                # Brazilian E-Commerce (Olist) dataset ZIP
+├── sql/
+│   └── create_tables.sql         # Olist table DDL
 ├── terraform/
 │   ├── backend/                  # State backend bootstrap
 │   │   ├── main.tf
@@ -73,11 +77,15 @@ RetailFlow/
 │   │   ├── outputs.tf
 │   │   ├── README.md
 │   │   └── terraform.tfvars.example
-│   ├── base/                     # Layer 1: RG, VNet, ADLS Gen2, NSGs, Private Endpoint
+│   ├── base/                     # Layer 1: RG, VNet, ADLS Gen2, NSGs, Postgres subnet, bootstrap VM
 │   │   ├── main.tf
 │   │   ├── variables.tf
 │   │   ├── outputs.tf
 │   │   └── README.md
+│   ├── postgres/                 # Optional: Olist PostgreSQL Flexible Server (private, base VNet)
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   └── outputs.tf
 │   ├── databricks/               # Layer 2: Databricks workspace
 │   │   ├── main.tf
 │   │   ├── variables.tf
@@ -106,7 +114,12 @@ RetailFlow/
 │           └── outputs.tf
 ├── scripts/
 │   ├── bootstrap_raw_folders.sh
-│   └── deploy_secret_scope.py
+│   ├── deploy_secret_scope.py
+│   ├── install_github_runner.sh  # Self-hosted runner on bootstrap VM (Olist)
+│   ├── load_olist.sh             # COPY Olist CSVs into Postgres
+│   ├── unzip_dataset.sh
+│   ├── load_csv_to_postgres.py
+│   └── requirements-ingest.txt
 ├── tests/
 │   ├── requirements.txt
 │   └── unit/

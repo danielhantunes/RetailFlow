@@ -64,8 +64,9 @@ The main pipeline job is defined in Terraform (`terraform/databricks/databricks_
 | Snowflake (if used; light BI) | $0–50+ |
 | **Total (without Snowflake)** | **~$30–65/month** |
 | **With light Snowflake** | **~$30–115/month** |
+| Optional: Olist Postgres (B1ms) + bootstrap VM (B1s) | ~$15–25/month when running |
 
-A **~$50/month** midpoint for Azure + Databricks is a reasonable estimate; add Snowflake if you use it for gold serving.
+A **~$50/month** midpoint for Azure + Databricks is a reasonable estimate; add Snowflake if you use it for gold serving. If you use the optional Olist PostgreSQL and bootstrap VM, add roughly $15–25/month while they are running; destroy them when not needed.
 
 ---
 
@@ -75,4 +76,4 @@ A **~$50/month** midpoint for Azure + Databricks is a reasonable estimate; add S
 - **After destroying resources**, you stop paying for them. Destroy **Databricks** (Terraform Databricks layer) to eliminate Databricks cost (~$15–25/month). Destroy **base** as well to remove ADLS, VNet, Key Vault, etc.
 - The only remaining cost after a full destroy is usually the **Terraform state backend** (storage account for tfstate) if you keep it for future runs—typically **$1–5/month**. Destroy that too for **$0**.
 
-**Destroy order:** Run Terraform Databricks (Dev) with `action: destroy` first, then Terraform Base (Dev) with `action: destroy`. See [README — CI/CD](../README.md#cicd-github-actions).
+**Destroy order:** Run Terraform Databricks (Dev) with `action: destroy` first, then Terraform Base (Dev) with `action: destroy`. To remove optional Olist Postgres and its state, run **Provision PostgreSQL for Olist** with `action: destroy` (can be run before or after base destroy). See [README — CI/CD](../README.md#cicd-github-actions).
