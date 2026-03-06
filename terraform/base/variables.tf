@@ -18,9 +18,9 @@ variable "tags" {
 
 # Bootstrap VM (self-hosted runner for Olist COPY into PostgreSQL)
 variable "bootstrap_vm_size" {
-  description = "VM size for bootstrap runner (Standard_B1s for minimal cost)"
+  description = "VM size for bootstrap runner (Standard_B2s; use B1ms/B2s if B1s unavailable in region)"
   type        = string
-  default     = "Standard_B1s"
+  default     = "Standard_B2s"
 }
 
 variable "bootstrap_vm_admin_username" {
