@@ -21,9 +21,9 @@ variable "tfstate_base_key" {
 }
 
 variable "azure_region" {
-  description = "Azure region for PostgreSQL Flexible Server"
+  description = "Deprecated: region is taken from base state (must match delegated subnet). Kept for backwards compatibility."
   type        = string
-  default     = "East US"
+  default     = ""
 }
 
 variable "resource_group_name" {

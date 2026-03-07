@@ -1,6 +1,6 @@
 # Terraform state backend bootstrap
 
-The Terraform remote state backend is provisioned via **GitHub Actions using OIDC** (no Azure client secret). Run this **once per environment** (before using the main Terraform root) to create the Azure storage used for remote state. **Default Azure region for RetailFlow: East US.**
+The Terraform remote state backend is provisioned via **GitHub Actions using OIDC** (no Azure client secret). Run this **once per environment** (before using the main Terraform root) to create the Azure storage used for remote state. **Default Azure region for RetailFlow: East US 2.**
 
 Creates the Azure resources used as Terraform remote state backend:
 

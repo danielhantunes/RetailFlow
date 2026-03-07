@@ -1,7 +1,7 @@
 variable "azure_region" {
   description = "Azure region for resources"
   type        = string
-  default     = "East US"
+  default     = "East US 2"
 }
 
 variable "data_lake_containers" {
@@ -18,7 +18,7 @@ variable "tags" {
 
 # Bootstrap VM (self-hosted runner for Olist COPY into PostgreSQL)
 variable "bootstrap_vm_size" {
-  description = "VM size for bootstrap runner (Standard_D2s_v3 for availability; B-series often restricted in eastus)"
+  description = "VM size for bootstrap runner (Standard_D2s_v3 for availability; B-series often restricted in some regions)"
   type        = string
   default     = "Standard_D2s_v3"
 }

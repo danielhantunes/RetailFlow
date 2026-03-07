@@ -118,12 +118,14 @@ Main pipeline job **RetailFlow_Main_Pipeline** is defined and provisioned in Ter
 
 ## Terraform
 
+**Default region:** All resources (state backend, base, Databricks, optional PostgreSQL) use **East US 2** by default to avoid subscription restrictions (e.g. `LocationIsOfferRestricted` for PostgreSQL in East US). Override via workflow inputs or Terraform variables if needed.
+
 Infrastructure is split into **two layers** so base infra and Databricks can be managed (and destroyed) independently. We use **OIDC + GitHub Actions** for remote state and for running Terraform (no Azure client secret).
 
 - **State backend first:** Run **Provision Terraform State Backend (Dev)** (creates `retailflow-dev-tfstate-rg`, storage `retailflowdevtfstate`). Optionally run **Provision Terraform State Backend (Prod)** for prod. See [terraform/backend/README.md](terraform/backend/README.md).
 - **Layer 1 – Base (terraform/base):** Resource group, VNet, subnets (Databricks, optional Postgres delegated subnet, bootstrap VM), **Azure Data Lake Storage Gen2** (`retailflowdevdls`) with containers **raw, bronze, silver, gold**, private endpoint. Managed by **[Terraform Base (Dev)](.github/workflows/terraform-base-dev.yml)** — action: `plan` \| `apply` \| `destroy`. State: `retailflow-dev-base.tfstate`.
 - **Layer 2 – Databricks only (terraform/databricks):** **Azure Databricks Workspace** `retailflow-dev-dbw` (standard), **dev cluster** (single-node, 30 min auto-terminate), and **main pipeline job** (RetailFlow_Main_Pipeline with job cluster 1–2 workers). Depends on base. Managed by **[Terraform Databricks (Dev)](.github/workflows/terraform-databricks-dev.yml)** — action: `plan` \| `apply` \| `destroy`. Databricks auth: **Azure AD** (same service principal as Azure; see [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md)). State: `retailflow-dev-databricks.tfstate`. **Apply order:** base first, then this. **Destroy order:** run Databricks destroy first, then base destroy.
-- **Optional – Olist PostgreSQL (terraform/postgres):** Private Azure Database for PostgreSQL Flexible Server in base VNet; bootstrap VM runner loads Brazilian E-Commerce (Olist) CSVs via `provision_olist_postgres.yml`. State: `retailflow-ingest-pg.tfstate`. Run after base.
+- **Optional – Olist PostgreSQL (terraform/postgres):** Private Azure Database for PostgreSQL Flexible Server in base VNet (same region as base). Bootstrap VM runner loads Brazilian E-Commerce (Olist) CSVs via `provision_olist_postgres.yml`. State: `retailflow-ingest-pg.tfstate`. Run after base.
 - **Environments:** Dev and prod only. Prod uses separate state backends and (when added) prod-specific workflows.
 
 ---
@@ -145,7 +147,7 @@ All workflows are **manual** (`workflow_dispatch`) unless noted.
 
 4. **After infra is up (any order):** deploy notebooks (`deploy-notebooks.yml`), deploy jobs (`deploy-jobs.yml`), configure secret scope, bootstrap RAW, run Airflow DAGs, dbt marts, sync Gold to Snowflake (when configured), monitoring.
 
-**Olist PostgreSQL (optional):** Single workflow **Provision PostgreSQL for Olist** (`provision_olist_postgres.yml`). Add **`GH_PAT`** for runner registration. **action:** `plan` \| `apply` \| `destroy` (Terraform only); **`full`** = apply + register + load (no `POSTGRES_*`); **`register_only`** = install runner (needs **GH_PAT**); **`bootstrap_only`** = load CSVs only — connection from Terraform state (no `POSTGRES_*` if you ran `apply` first). **Sequence:** plan → apply → register_only → bootstrap_only → destroy. Run after Terraform Base (Dev).
+**Olist PostgreSQL (optional):** Single workflow **Provision PostgreSQL for Olist** (`provision_olist_postgres.yml`). Add **`GH_PAT`** for runner registration. **action:** `plan` \| `apply` \| `destroy` (Terraform only); **`full`** = apply + register + load (no `POSTGRES_*`); **`register_only`** = install runner (needs **GH_PAT**); **`bootstrap_only`** = load CSVs only — connection from Terraform state (no `POSTGRES_*` if you ran `apply` first). **Sequence:** plan → apply → register_only → bootstrap_only → destroy. Run after Terraform Base (Dev). **If you get `LocationIsOfferRestricted`** for PostgreSQL: your subscription may restrict that region; [request a quota increase](https://aka.ms/postgres-request-quota-increase) or ensure the base layer is in an allowed region (default: **East US 2**).
 
 **Optional:** Run **Provision Terraform State Backend (Prod)** (`provision-tfstate-prod.yml`) when you need a separate prod state backend; then use prod Terraform workflows (when added) in the same order (base → databricks).
 

@@ -39,9 +39,11 @@ resource "random_password" "postgres_admin" {
   override_special = "!#$%&*()-_=+[]{}<>:?"
 }
 
+# Region must match base (required for VNet delegated subnet). If you get LocationIsOfferRestricted,
+# request a quota increase for PostgreSQL in that region or deploy base in an allowed region (default: East US 2).
 resource "azurerm_resource_group" "postgres" {
   name     = var.resource_group_name
-  location = var.azure_region
+  location = data.terraform_remote_state.base.outputs.location
   tags     = var.tags
 }
 

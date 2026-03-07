@@ -4,9 +4,9 @@ variable "name_prefix" {
 }
 
 variable "azure_region" {
-  description = "Azure region for the state resources (default for RetailFlow: East US)"
+  description = "Azure region for the state resources (default for RetailFlow: East US 2)"
   type        = string
-  default     = "East US"
+  default     = "East US 2"
 }
 
 variable "container_name" {
