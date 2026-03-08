@@ -201,6 +201,13 @@ See [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md) for implementation checklist. **Fir
 
 ---
 
+## Troubleshooting
+
+- **ContainerNotFound** when running Terraform Base (Dev): The state backend workflow may have created the resource group and storage account but not the **tfstate** container (e.g. due to Azure eventual consistency). In Azure Portal, open the storage account **retailflowdevtfstate** → **Containers** → create a container named **tfstate**. Then re-run Terraform Base (Dev). See [terraform/backend/README.md](terraform/backend/README.md#troubleshooting).
+- **AuthorizationFailed** on `roleAssignments/write` when running Terraform Databricks (Dev): The service principal needs **User Access Administrator** (or Owner) on the subscription or resource group to create the workspace Contributor assignment. Grant that role in Azure Portal (Subscription or **retailflow-dev-rg** → Access control (IAM) → Add role assignment). See [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md).
+
+---
+
 ## License
 
 Internal / portfolio use. Adjust org names, endpoints, and secrets for your environment.

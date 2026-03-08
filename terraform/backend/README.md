@@ -53,3 +53,7 @@ terraform apply
 ```
 
 State for this bootstrap is stored locally by default. After the backend exists, configure the main Terraform root to use the azurerm backend: run `terraform output backend_config` and use that snippet (set `key` to `retailflow-dev.tfstate` or `retailflow-prod.tfstate` per environment), or pass `-backend-config=...` at init.
+
+## Troubleshooting
+
+If the workflow fails with **404 (ParentResourceNotFound)** when creating the storage account, Azure may have created the resource group and storage account but Terraform failed on a follow-up read (eventual consistency). **Re-run the workflow** once or twice; the second run often succeeds. If the resource group and storage account exist but the **tfstate** container does not, create the container manually: Storage account → **Containers** → **+ Container** → name **tfstate**. Then Terraform Base (Dev) and Databricks (Dev) can use the backend; no need to re-run the state backend workflow.
