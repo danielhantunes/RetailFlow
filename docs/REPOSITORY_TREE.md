@@ -88,6 +88,7 @@ RetailFlow/
 │   │   └── outputs.tf
 │   ├── databricks/               # Layer 2: Databricks workspace
 │   │   ├── main.tf
+│   │   ├── databricks_resources.tf   # Job + cluster definitions
 │   │   ├── variables.tf
 │   │   ├── outputs.tf
 │   │   └── README.md
