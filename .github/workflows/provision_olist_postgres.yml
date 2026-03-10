@@ -185,15 +185,17 @@ jobs:
             "$(printf '%q' "$REPO")" \
             "$(printf '%q' "$RUNNER_VER")" \
             "$SCRIPT_B64" > /tmp/vm_script.sh
-          OUT=$(az vm run-command invoke \
+          echo "Running installer on VM $VM_NAME in $RESOURCE_GROUP..."
+          az vm run-command invoke \
             --resource-group "$RESOURCE_GROUP" \
             --name "$VM_NAME" \
             --command-id RunShellScript \
             --scripts "$(cat /tmp/vm_script.sh)" \
-            --query 'value[0].message' -o tsv 2>/dev/null || true)
-          echo "--- VM Run Command output ---"
-          echo "$OUT"
-          echo "---"
+            --query 'value[0].message' -o tsv
+      - name: Verify runner and next step (register_only / full)
+        if: github.event.inputs.action != 'bootstrap_only'
+        run: |
+          echo "::notice::Runner install finished. In GitHub: Settings → Actions → Runners. Wait until a runner with labels 'self-hosted, linux' shows status **Idle**. Then run this workflow again with action **bootstrap_only**."
 
   bootstrap:
     name: Load dataset into Postgres
