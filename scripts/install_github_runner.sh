@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install and register GitHub Actions self-hosted runner. Run on bootstrap VM via Azure Run Command.
 # Azure Run Command runs as root; the runner must NOT run as root ("Must not run with sudo").
-# This script creates a dedicated user and runs config/svc as that user.
+# This script creates a dedicated user, runs config.sh as that user, and installs a systemd unit (as root) that runs the runner as that user.
 # Usage: RUNNER_TOKEN=<token> REPO=<owner/repo> [RUNNER_VERSION=2.321.0] ./install_github_runner.sh
 # Token: from POST /repos/{owner}/{repo}/actions/runners/registration-token (use PAT with repo admin).
 
@@ -29,16 +29,41 @@ fi
 # Install or replace existing (root prepares dir and bits)
 mkdir -p "$RUNNER_DIR"
 cd "$RUNNER_DIR"
-if [[ -f config.sh ]]; then
+SVC_NAME="actions-runner-retailflow"
+if systemctl is-active --quiet "${SVC_NAME}.service" 2>/dev/null; then
   echo "Stopping existing runner service..."
-  runuser -u "$RUNNER_USER" -- bash -c "cd $RUNNER_DIR && (./svc.sh stop 2>/dev/null || true; ./svc.sh uninstall 2>/dev/null || true)"
+  systemctl stop "${SVC_NAME}.service" || true
+fi
+if [[ -f config.sh ]]; then
+  runuser -u "$RUNNER_USER" -- bash -c "cd $RUNNER_DIR && (./svc.sh stop 2>/dev/null || true; ./svc.sh uninstall 2>/dev/null || true)" || true
 fi
 curl -sSfL -o runner.tar.gz "$RUNNER_URL"
 tar xzf runner.tar.gz
 rm -f runner.tar.gz
 chown -R "${RUNNER_USER}:${RUNNER_USER}" "$RUNNER_DIR"
 
-# Configure and install service as non-root (--replace allows re-registration with same token)
-runuser -u "$RUNNER_USER" -- env RUNNER_TOKEN="$RUNNER_TOKEN" bash -c "cd $RUNNER_DIR && ./config.sh --url 'https://github.com/${REPO}' --token \"\$RUNNER_TOKEN\" --labels 'self-hosted,linux' --unattended --replace && ./svc.sh install && ./svc.sh start"
+# config.sh must run as non-root; svc.sh install requires root but would run service as root. Use a custom systemd unit.
+runuser -u "$RUNNER_USER" -- env RUNNER_TOKEN="$RUNNER_TOKEN" bash -c "cd $RUNNER_DIR && ./config.sh --url 'https://github.com/${REPO}' --token \"\$RUNNER_TOKEN\" --labels 'self-hosted,linux' --unattended --replace"
+
+cat > "/etc/systemd/system/${SVC_NAME}.service" << EOF
+[Unit]
+Description=GitHub Actions Runner (RetailFlow)
+After=network.target
+
+[Service]
+Type=simple
+User=${RUNNER_USER}
+Group=${RUNNER_USER}
+WorkingDirectory=${RUNNER_DIR}
+ExecStart=${RUNNER_DIR}/run.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable "${SVC_NAME}.service"
+systemctl start "${SVC_NAME}.service"
 
 echo "Runner installed and started (running as ${RUNNER_USER})."
