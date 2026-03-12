@@ -226,6 +226,11 @@ jobs:
           fi
           echo "PGDATABASE=postgres" >> "$GITHUB_ENV"
 
+      - name: Install PostgreSQL client (runner VM)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
       - name: Verify PostgreSQL connectivity
         run: |
           echo "Checking connection to PostgreSQL..."
