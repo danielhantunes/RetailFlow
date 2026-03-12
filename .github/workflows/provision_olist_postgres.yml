@@ -195,7 +195,11 @@ jobs:
       - name: Verify runner and next step (register_only / full)
         if: github.event.inputs.action != 'bootstrap_only'
         run: |
-          echo "::notice::Runner install finished. In GitHub: Settings → Actions → Runners. Wait until a runner with labels 'self-hosted, linux' shows status **Idle**. Then run this workflow again with action **bootstrap_only**."
+          if [ "${{ github.event.inputs.action }}" = "register_only" ]; then
+            echo "::notice::Runner install finished. In GitHub: Settings → Actions → Runners, wait until a runner with labels 'self-hosted, linux' shows status **Idle**. Then run this workflow again with action **bootstrap_only**."
+          else
+            echo "::notice::Runner install finished. The **Load dataset into Postgres** job will run next in this workflow on the same runner."
+          fi
 
   bootstrap:
     name: Load dataset into Postgres
