@@ -26,6 +26,10 @@ if ! id -u "$RUNNER_USER" &>/dev/null; then
   useradd --system --create-home --shell /bin/bash "$RUNNER_USER"
 fi
 
+# Allow runner user to run sudo without password (needed for "Install PostgreSQL client" step in bootstrap job)
+echo "${RUNNER_USER} ALL=(ALL) NOPASSWD: ALL" > "/etc/sudoers.d/${RUNNER_USER}"
+chmod 0440 "/etc/sudoers.d/${RUNNER_USER}"
+
 # Install or replace existing (root prepares dir and bits)
 mkdir -p "$RUNNER_DIR"
 cd "$RUNNER_DIR"
