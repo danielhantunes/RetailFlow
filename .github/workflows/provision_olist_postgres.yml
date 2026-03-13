@@ -192,6 +192,22 @@ jobs:
             --command-id RunShellScript \
             --scripts "$(cat /tmp/vm_script.sh)" \
             --query 'value[0].message' -o tsv
+
+      - name: Ensure runner service is running (restart and show status)
+        if: github.event.inputs.action != 'bootstrap_only'
+        env:
+          RESOURCE_GROUP: ${{ github.event.inputs.resource_group }}
+          VM_NAME: ${{ github.event.inputs.vm_name }}
+        run: |
+          echo "Restarting runner service and checking status on VM..."
+          az vm run-command invoke \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$VM_NAME" \
+            --command-id RunShellScript \
+            --scripts "sudo systemctl restart actions-runner-retailflow.service; sleep 3; sudo systemctl status actions-runner-retailflow.service --no-pager; echo '---'; sudo journalctl -u actions-runner-retailflow.service -n 15 --no-pager" \
+            --query 'value[0].message' -o tsv
+          echo "If the runner still shows Offline in GitHub, check the status above for errors (e.g. Must not run with sudo, network). Ensure the VM has outbound internet to reach GitHub."
+
       - name: Verify runner and next step (register_only / full)
         if: github.event.inputs.action != 'bootstrap_only'
         run: |

@@ -42,6 +42,12 @@ tar xzf runner.tar.gz
 rm -f runner.tar.gz
 chown -R "${RUNNER_USER}:${RUNNER_USER}" "$RUNNER_DIR"
 
+# If runner was already configured (e.g. from a previous register_only), remove so we can re-register with the new token.
+if [[ -f "$RUNNER_DIR/config.sh" ]] && [[ -f "$RUNNER_DIR/.runner" ]]; then
+  echo "Removing existing runner configuration so we can re-register..."
+  runuser -u "$RUNNER_USER" -- bash -c "cd $RUNNER_DIR && ./config.sh remove --unattended" || true
+fi
+
 # config.sh must run as non-root; svc.sh install requires root but would run service as root. Use a custom systemd unit.
 runuser -u "$RUNNER_USER" -- env RUNNER_TOKEN="$RUNNER_TOKEN" bash -c "cd $RUNNER_DIR && ./config.sh --url 'https://github.com/${REPO}' --token \"\$RUNNER_TOKEN\" --labels 'self-hosted,linux' --unattended --replace"
 
