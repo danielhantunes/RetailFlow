@@ -58,7 +58,7 @@ output "bootstrap_vm_private_ip" {
 }
 
 output "bootstrap_vm_admin_password" {
-  value       = random_password.bootstrap_vm_admin.result
+  value       = var.bootstrap_vm_ssh_public_key != "" ? null : random_password.bootstrap_vm_admin.result
   sensitive   = true
-  description = "Bootstrap VM admin password (use for SSH via Bastion and runner setup)"
+  description = "Bootstrap VM admin password (null when bootstrap_vm_ssh_public_key is set; use SSH key then)"
 }

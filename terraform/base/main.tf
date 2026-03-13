@@ -246,9 +246,17 @@ resource "azurerm_linux_virtual_machine" "bootstrap" {
   resource_group_name             = azurerm_resource_group.rg.name
   size                            = var.bootstrap_vm_size
   admin_username                  = var.bootstrap_vm_admin_username
-  admin_password                  = random_password.bootstrap_vm_admin.result
-  disable_password_authentication = false
-  network_interface_ids            = [azurerm_network_interface.bootstrap_vm.id]
+  admin_password                  = var.bootstrap_vm_ssh_public_key != "" ? null : random_password.bootstrap_vm_admin.result
+  disable_password_authentication = var.bootstrap_vm_ssh_public_key != ""
+  network_interface_ids           = [azurerm_network_interface.bootstrap_vm.id]
+
+  dynamic "admin_ssh_key" {
+    for_each = var.bootstrap_vm_ssh_public_key != "" ? [1] : []
+    content {
+      username   = var.bootstrap_vm_admin_username
+      public_key = var.bootstrap_vm_ssh_public_key
+    }
+  }
 
   os_disk {
     caching              = "ReadWrite"

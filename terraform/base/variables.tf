@@ -28,3 +28,10 @@ variable "bootstrap_vm_admin_username" {
   type        = string
   default     = "azureuser"
 }
+
+variable "bootstrap_vm_ssh_public_key" {
+  description = "Optional SSH public key for bootstrap VM. When set, password auth is disabled and key-only login is used (store private key in Key Vault)."
+  type        = string
+  default     = ""
+  sensitive   = true
+}

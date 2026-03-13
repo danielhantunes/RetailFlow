@@ -251,6 +251,11 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-client unzip
 
+      - name: Install toolbox (runner VM)
+        run: |
+          chmod +x scripts/toolbox_setup.sh
+          ./scripts/toolbox_setup.sh
+
       - name: Verify PostgreSQL connectivity
         run: |
           echo "Checking connection to PostgreSQL..."
