@@ -4,7 +4,7 @@ The **bootstrap VM** (`retailflow-dev-bootstrap-vm`) in the base VNet can be use
 
 ## 1. Setup on the VM
 
-After connecting to the VM (Bastion or Run Command), run the toolbox setup script to install PostgreSQL client, Python 3, pip, psycopg2, pandas, git, and jq:
+When you run **Provision PostgreSQL for Olist** with action **full** or **bootstrap_only**, the workflow installs the toolbox on the runner VM automatically. If you connect to the VM later (e.g. via Bastion), the tools are already there. To install or reinstall manually, run the toolbox setup script to install PostgreSQL client, Python 3, pip, psycopg2, pandas, git, and jq:
 
 ```bash
 # Optional: set Postgres env to verify connectivity at the end of setup

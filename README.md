@@ -44,7 +44,7 @@ RetailFlow/
 │   └── terraform.tfvars.example
 ├── sql/                       # Olist table DDL (create_tables.sql)
 ├── databaseinput/            # Brazilian E-Commerce (Olist) dataset ZIP
-├── scripts/                   # Bootstrap RAW, secret scope, Olist runner install & load (load_olist.sh, install_github_runner.sh)
+├── scripts/                   # Bootstrap RAW, secret scope, Olist runner install & load (load_olist.sh, install_github_runner.sh), toolbox (toolbox_setup.sh, toolbox_psql_examples.sh, toolbox_inspect_postgres.py)
 ├── tests/
 │   ├── unit/
 │   └── requirements.txt
@@ -56,6 +56,7 @@ RetailFlow/
 │   ├── NEXT_STEPS.md
 │   ├── RAW_LAYER_DESIGN.md
 │   ├── REPOSITORY_TREE.md
+│   ├── TOOLBOX.md             # Data-engineering toolbox on bootstrap VM (psql, Python, Key Vault)
 │   ├── UNITY_CATALOG.md
 │   └── OBSERVABILITY.md
 ├── .github/workflows/         # CI/CD: provision tfstate, terraform base/databricks, deploy notebooks/jobs, promote env, tests
@@ -147,7 +148,7 @@ All workflows are **manual** (`workflow_dispatch`) unless noted.
 
 4. **After infra is up (any order):** deploy notebooks (`deploy-notebooks.yml`), deploy jobs (`deploy-jobs.yml`), configure secret scope, bootstrap RAW, run Airflow DAGs, dbt marts, sync Gold to Snowflake (when configured), monitoring.
 
-**Olist PostgreSQL (optional):** Single workflow **Provision PostgreSQL for Olist** (`provision_olist_postgres.yml`). **Must run after Terraform Base (Dev)** — Postgres Terraform reads base state (delegated subnet, private DNS). It does **not** need to run after Terraform Databricks; Postgres and Databricks can be provisioned in either order after base. **If Databricks will ingest from PostgreSQL (Olist):** run Base → **Postgres** (apply + bootstrap to load data) → **Databricks** so the database is ready before running ingestion jobs. Add **`GH_PAT`** for runner registration. **action:** `plan` \| `apply` \| `destroy` (Terraform only); **`full`** = apply + register + load (no `POSTGRES_*`); **`register_only`** = install self-hosted runner on bootstrap VM (needs **GH_PAT**); **`bootstrap_only`** = load CSVs into Postgres (runs on that runner). **Sequence:** plan → apply → **register_only** (then wait until runner shows **Idle** in Settings → Actions → Runners) → **bootstrap_only** → destroy. **If you get `LocationIsOfferRestricted`** for PostgreSQL: your subscription may restrict that region; [request a quota increase](https://aka.ms/postgres-request-quota-increase) or ensure the base layer is in an allowed region (default: **East US 2**).
+**Olist PostgreSQL (optional):** Single workflow **Provision PostgreSQL for Olist** (`provision_olist_postgres.yml`). **Must run after Terraform Base (Dev)** — Postgres Terraform reads base state (delegated subnet, private DNS). It does **not** need to run after Terraform Databricks; Postgres and Databricks can be provisioned in either order after base. **If Databricks will ingest from PostgreSQL (Olist):** run Base → **Postgres** (apply + bootstrap to load data) → **Databricks** so the database is ready before running ingestion jobs. Add **`GH_PAT`** for runner registration. **action:** `plan` \| `apply` \| `destroy` (Terraform only); **`full`** = apply + register + load (no `POSTGRES_*`); **`register_only`** = install self-hosted runner on bootstrap VM (needs **GH_PAT**); **`bootstrap_only`** = load CSVs into Postgres (runs on that runner). For **`full`** or **`bootstrap_only`**, the workflow also installs the **data-engineering toolbox** (psql, Python, psycopg2, pandas, git, jq) on the runner VM — see [docs/TOOLBOX.md](docs/TOOLBOX.md). **Sequence:** plan → apply → **register_only** (then wait until runner shows **Idle** in Settings → Actions → Runners) → **bootstrap_only** → destroy. **If you get `LocationIsOfferRestricted`** for PostgreSQL: your subscription may restrict that region; [request a quota increase](https://aka.ms/postgres-request-quota-increase) or ensure the base layer is in an allowed region (default: **East US 2**).
 
 **Optional:** Run **Provision Terraform State Backend (Prod)** (`provision-tfstate-prod.yml`) when you need a separate prod state backend; then use prod Terraform workflows (when added) in the same order (base → databricks).
 

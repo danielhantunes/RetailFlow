@@ -118,6 +118,9 @@ RetailFlow/
 │   ├── deploy_secret_scope.py
 │   ├── install_github_runner.sh  # Self-hosted runner on bootstrap VM (Olist)
 │   ├── load_olist.sh             # COPY Olist CSVs into Postgres
+│   ├── toolbox_setup.sh          # Data-engineering toolbox (psql, Python, psycopg2, pandas, git, jq)
+│   ├── toolbox_psql_examples.sh  # Example psql commands for Postgres inspection
+│   ├── toolbox_inspect_postgres.py  # Python script: list tables, preview rows
 │   ├── unzip_dataset.sh
 │   ├── load_csv_to_postgres.py
 │   └── requirements-ingest.txt
@@ -134,5 +137,6 @@ RetailFlow/
     ├── UNITY_CATALOG.md
     ├── OBSERVABILITY.md
     ├── NEXT_STEPS.md
-    └── REPOSITORY_TREE.md
+    ├── REPOSITORY_TREE.md
+    └── TOOLBOX.md                # Data-engineering toolbox on bootstrap VM (psql, Python, Key Vault)
 ```
