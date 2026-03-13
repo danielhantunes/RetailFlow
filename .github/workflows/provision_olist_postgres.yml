@@ -249,7 +249,7 @@ jobs:
       - name: Install PostgreSQL client (runner VM)
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-client
+          sudo apt-get install -y -qq postgresql-client unzip
 
       - name: Verify PostgreSQL connectivity
         run: |
