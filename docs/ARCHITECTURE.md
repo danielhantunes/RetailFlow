@@ -2,40 +2,50 @@
 
 ## Overview
 
-RetailFlow is an enterprise data platform for a retail company, built on **Azure Databricks** with a **medallion architecture** (RAW → BRONZE → SILVER → GOLD). It ingests online orders, store sales, product catalog, inventory, customers, payments, and clickstream events to support analytics, BI, and reporting.
+RetailFlow is an enterprise data platform for a retail company, built on **Azure Databricks** with a **medallion architecture** (RAW → BRONZE → SILVER → GOLD). **Target flow:** PostgreSQL (e.g. Olist) → CDC ingestion (Python / VM toolbox) → ADLS RAW → Databricks Bronze → Silver → Snowflake Gold → dbt models → analytics marts. It also supports other sources (REST APIs, CSVs, etc.) ingested to RAW via notebooks. See [DATA_FLOW.md](DATA_FLOW.md).
 
 ## High-Level Architecture
+
+**Target flow:** PostgreSQL → CDC (VM toolbox) → ADLS RAW → Databricks Bronze/Silver → Snowflake Gold → dbt → Analytics marts.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                           SOURCE SYSTEMS                                          │
-├─────────────┬─────────────┬─────────────┬─────────────┬─────────────┬────────────┤
-│ REST APIs   │ SQL DB      │ JSON Logs   │ CSV         │ Inventory   │ Payments   │
-│ (orders,    │ (extracts)  │ (clickstream)│ (products)  │ System      │ Gateway    │
-│  customers) │             │             │             │             │            │
-└──────┬──────┴──────┬──────┴──────┬──────┴──────┬──────┴──────┬──────┴──────┬──────┘
-       │             │             │             │             │             │
-       ▼             ▼             ▼             ▼             ▼             ▼
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                    INGESTION (Notebooks / ADF / Airflow)                          │
-└─────────────────────────────────────────────────────────────────────────────────┘
-       │
-       ▼
+├────────────────────┬─────────────┬─────────────┬─────────────┬─────────────┬───────┤
+│ PostgreSQL (Olist) │ REST APIs   │ SQL DB     │ JSON Logs   │ CSV         │ etc.  │
+│ (primary source)   │ (orders,    │ (extracts)  │ (clickstream)│ (products)  │       │
+│                    │  customers) │             │             │             │       │
+└─────────┬──────────┴──────┬──────┴──────┬──────┴──────┬──────┴──────┬─────┴───────┘
+          │                 │             │             │             │
+          ▼                 │             │             │             │
+┌─────────────────────────┐ │             │             │             │
+│ CDC ingestion           │ │             │             │             │
+│ (Python / VM toolbox)   │ │             │             │             │
+│ → writes to RAW         │ │             │             │             │
+└─────────┬───────────────┘ │             │             │             │
+          │                 ▼             ▼             ▼             ▼
+          │         ┌─────────────────────────────────────────────────────────────┐
+          │         │     INGESTION (Notebooks / ADF / Airflow for other sources) │
+          │         └─────────────────────────────────────────────────────────────┘
+          │                 │
+          └─────────────────┼─────────────────────────────────────────────────────┘
+                            ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │  AZURE DATA LAKE STORAGE GEN2 (RAW) — Immutable, partition by ingestion_date     │
-│  /data/raw/orders | customers | products | inventory | clickstream | payments   │
+│  /data/raw/orders | customers | products | order_items | clickstream | payments │
 └─────────────────────────────────────────────────────────────────────────────────┘
-       │
-       ▼
+                            │
+                            ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│  UNITY CATALOG + DELTA LAKE                                                       │
+│  DATABRICKS — UNITY CATALOG + DELTA LAKE                                          │
 │  BRONZE (Delta) → SILVER (Delta) → GOLD (Delta)                                  │
 │  Schema enforcement, audit cols, dedup, SCD2, fact/dim tables                     │
 └─────────────────────────────────────────────────────────────────────────────────┘
-       │
-       ▼
+                            │
+                            ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│  CONSUMERS: Power BI, Tableau, Databricks SQL, Reporting, ML                      │
+│  SNOWFLAKE (Gold / serving)  →  dbt models  →  Analytics marts                    │
+│  CONSUMERS: Power BI, Tableau, Databricks SQL, Reporting, ML                     │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 

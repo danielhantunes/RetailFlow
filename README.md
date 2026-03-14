@@ -82,14 +82,46 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DATA_FLOW.md](docs/DATA_
 
 ---
 
-## Data flow
+## Target data flow
 
-1. **Ingestion** (notebooks) → RAW on ADLS (`/data/raw/orders`, `customers`, `products`, `inventory`, `clickstream`, etc.).
+The platform is designed around this end-to-end flow (e.g. for Olist / retail data):
+
+```
+PostgreSQL (source, e.g. Olist)
+      │
+      ▼
+CDC ingestion (Python / VM toolbox)  →  captures changes, writes to RAW
+      │
+      ▼
+ADLS RAW  (immutable, partition by ingestion_date)
+      │
+      ▼
+Databricks  Bronze → Silver  (Delta, Unity Catalog)
+      │
+      ▼
+Snowflake  (Gold layer / serving)
+      │
+      ▼
+dbt models  (marts, transformations)
+      │
+      ▼
+Analytics marts  (Power BI, Tableau, reporting)
+```
+
+- **PostgreSQL:** Operational source (e.g. Azure PostgreSQL with Olist data). Provisioned via Terraform; initial load via `provision_olist_postgres.yml`.
+- **CDC ingestion:** Python on the **VM toolbox** (bootstrap VM) reads from Postgres (logical decoding or query-based capture) and writes to ADLS RAW. See [docs/DATA_FLOW.md](docs/DATA_FLOW.md#postgres--cdc-to-raw) and [docs/TOOLBOX.md](docs/TOOLBOX.md).
+- **RAW → Bronze → Silver:** Databricks notebooks/DLT; Gold is then synced or exposed to **Snowflake** for serving; **dbt** builds marts on Gold.
+
+---
+
+## Data flow (detail)
+
+1. **Source → RAW:** **PostgreSQL** is the primary source; **CDC ingestion** (Python / VM toolbox) writes to ADLS RAW. Other sources (REST APIs, CSVs) can be ingested by notebooks to the same RAW paths.
 2. **Bronze** notebooks/DLT read RAW → parse, add audit columns → Delta tables in Bronze schema.
 3. **Silver** reads Bronze → clean, dedupe, validate → Delta in Silver schema.
-4. **Gold** reads Silver → facts, dimensions, marts → Delta in Gold schema (dbt + notebooks).
-5. **Serving:** Gold is synced or exposed to **Snowflake**; **Airflow** orchestrates the medallion pipeline.
-6. **Consumption:** Power BI, Tableau, and SQL clients query **Snowflake** (gold); Databricks SQL can query Gold in the lake as needed.
+4. **Gold** reads Silver → facts, dimensions, marts → Delta in Gold schema (dbt + notebooks). Gold is synced or exposed to **Snowflake**.
+5. **Serving:** **Snowflake** holds the Gold layer; **Airflow** orchestrates the medallion pipeline.
+6. **Consumption:** **dbt** models run on Gold; Power BI, Tableau, and SQL clients query **Snowflake** (gold) or Databricks for analytics marts.
 
 ---
 
