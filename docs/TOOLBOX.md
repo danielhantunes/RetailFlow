@@ -1,6 +1,6 @@
 # Data Engineering Toolbox VM
 
-The **bootstrap VM** (`retailflow-dev-bootstrap-vm`) in the base VNet can be used as a secure toolbox to inspect and analyze the Azure PostgreSQL (Olist) database after provisioning and loading data. The VM has no public IP; use **Azure Bastion** or **Run Command** to connect.
+The **bootstrap VM** (`retailflow-dev-bootstrap-vm`) in the base VNet is used for **one-time or ad-hoc loads** (e.g. initial Olist CSV load via the Provision PostgreSQL for Olist workflow) and **inspecting Postgres** (psql, Python scripts). **Scheduled** Postgres → ADLS RAW ingestion is done by the **Azure Function** (see **Provision Postgres Ingest Function** workflow and [DATA_FLOW.md](DATA_FLOW.md)). The VM has no public IP; use **Azure Bastion** or **Run Command** to connect.
 
 ## 1. Setup on the VM
 

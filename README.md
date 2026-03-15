@@ -37,11 +37,14 @@ RetailFlow/
 │   ├── base/                 # Layer 1: RG, VNet, subnets (Databricks, Postgres, bootstrap VM), ADLS Gen2, NSGs
 │   ├── databricks/           # Layer 2: Databricks workspace (retailflow-dev-dbw, standard)
 │   ├── postgres/             # Optional: Olist PostgreSQL Flexible Server (private, base VNet)
+│   ├── postgres_ingest_function/  # Azure Function: Postgres → ADLS RAW (run after base + postgres)
 │   ├── modules/              # Legacy/shared: databricks, storage, key_vault, networking
 │   ├── main.tf               # Legacy single-root (optional)
 │   ├── variables.tf
 │   ├── outputs.tf
 │   └── terraform.tfvars.example
+├── functions/
+│   └── postgres_to_raw/      # Azure Function (timer): Postgres → ADLS RAW ingestion
 ├── sql/                       # Olist table DDL (create_tables.sql)
 ├── databaseinput/            # Brazilian E-Commerce (Olist) dataset ZIP
 ├── scripts/                   # Bootstrap RAW, secret scope, Olist runner install & load (load_olist.sh, install_github_runner.sh), toolbox (toolbox_setup.sh, toolbox_psql_examples.sh, toolbox_inspect_postgres.py)
@@ -90,7 +93,7 @@ The platform is designed around this end-to-end flow (e.g. for Olist / retail da
 PostgreSQL (source, e.g. Olist)
       │
       ▼
-CDC ingestion (Python / VM toolbox)  →  captures changes, writes to RAW
+Azure Function  (timer-triggered)  →  reads Postgres, writes to RAW
       │
       ▼
 ADLS RAW  (immutable, partition by ingestion_date)
@@ -109,14 +112,15 @@ Analytics marts  (Power BI, Tableau, reporting)
 ```
 
 - **PostgreSQL:** Operational source (e.g. Azure PostgreSQL with Olist data). Provisioned via Terraform; initial load via `provision_olist_postgres.yml`.
-- **CDC ingestion:** Python on the **VM toolbox** (bootstrap VM) reads from Postgres (logical decoding or query-based capture) and writes to ADLS RAW. See [docs/DATA_FLOW.md](docs/DATA_FLOW.md#postgres--cdc-to-raw) and [docs/TOOLBOX.md](docs/TOOLBOX.md).
+- **Scheduled ingestion:** An **Azure Function** (Postgres → RAW) runs on a timer (e.g. every 15 min), reads from Postgres (query-based), and writes to ADLS RAW. Provision via **Provision Postgres Ingest Function** workflow (run after Base and Postgres). See [docs/DATA_FLOW.md](docs/DATA_FLOW.md#postgres--azure-function-to-raw).
+- **VM toolbox:** The bootstrap VM is used for **one-time or ad-hoc loads** (e.g. initial Olist CSV load) and **inspecting Postgres** (psql, Python scripts). It is not used for scheduled ingestion. See [docs/TOOLBOX.md](docs/TOOLBOX.md).
 - **RAW → Bronze → Silver:** Databricks notebooks/DLT; Gold is then synced or exposed to **Snowflake** for serving; **dbt** builds marts on Gold.
 
 ---
 
 ## Data flow (detail)
 
-1. **Source → RAW:** **PostgreSQL** is the primary source; **CDC ingestion** (Python / VM toolbox) writes to ADLS RAW. Other sources (REST APIs, CSVs) can be ingested by notebooks to the same RAW paths.
+1. **Source → RAW:** **PostgreSQL** is the primary source; an **Azure Function** (timer-triggered) reads from Postgres and writes to ADLS RAW. The **VM toolbox** is for one-time/ad-hoc loads and inspection only. Other sources (REST APIs, CSVs) can be ingested by notebooks to the same RAW paths.
 2. **Bronze** notebooks/DLT read RAW → parse, add audit columns → Delta tables in Bronze schema.
 3. **Silver** reads Bronze → clean, dedupe, validate → Delta in Silver schema.
 4. **Gold** reads Silver → facts, dimensions, marts → Delta in Gold schema (dbt + notebooks). Gold is synced or exposed to **Snowflake**.
@@ -159,6 +163,7 @@ Infrastructure is split into **two layers** so base infra and Databricks can be 
 - **Layer 1 – Base (terraform/base):** Resource group, VNet, subnets (Databricks, optional Postgres delegated subnet, bootstrap VM), **Azure Data Lake Storage Gen2** (`retailflowdevdls`) with containers **raw, bronze, silver, gold**, private endpoint. Managed by **[Terraform Base (Dev)](.github/workflows/terraform-base-dev.yml)** — action: `plan` \| `apply` \| `destroy`. State: `retailflow-dev-base.tfstate`.
 - **Layer 2 – Databricks only (terraform/databricks):** **Azure Databricks Workspace** `retailflow-dev-dbw` (standard), **dev cluster** (single-node, 30 min auto-terminate), and **main pipeline job** (RetailFlow_Main_Pipeline with job cluster 1–2 workers). Depends on base. Managed by **[Terraform Databricks (Dev)](.github/workflows/terraform-databricks-dev.yml)** — action: `plan` \| `apply` \| `destroy`. Databricks auth: **Azure AD** (same service principal as Azure; see [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md)). State: `retailflow-dev-databricks.tfstate`. **Apply order:** base first, then this. **Destroy order:** run Databricks destroy first, then base destroy.
 - **Optional – Olist PostgreSQL (terraform/postgres):** Private Azure Database for PostgreSQL Flexible Server in base VNet (same region as base). Bootstrap VM runner loads Brazilian E-Commerce (Olist) CSVs via `provision_olist_postgres.yml`. State: `retailflow-ingest-pg.tfstate`. Run after base (not after Databricks). For Databricks ingestion from Postgres: provision Base → Postgres (with bootstrap) → Databricks.
+- **Optional – Postgres Ingest Function (terraform/postgres_ingest_function):** Azure Function App (timer-triggered) that reads from Postgres and writes to ADLS RAW. Run **after** Terraform Base (Dev) and Postgres (apply). Managed by **Provision Postgres Ingest Function** workflow (`provision_postgres_ingest_function.yml`) — action: `plan` \| `apply` \| `destroy`. On apply, the workflow deploys the function code from `functions/postgres_to_raw`. State: `retailflow-postgres-ingest-function.tfstate`.
 - **Environments:** Dev and prod only. Prod uses separate state backends and (when added) prod-specific workflows.
 
 ---
@@ -180,13 +185,15 @@ All workflows are **manual** (`workflow_dispatch`) unless noted.
 
 4. **After infra is up (any order):** deploy notebooks (`deploy-notebooks.yml`), deploy jobs (`deploy-jobs.yml`), configure secret scope, bootstrap RAW, run Airflow DAGs, dbt marts, sync Gold to Snowflake (when configured), monitoring.
 
-**Olist PostgreSQL (optional):** Single workflow **Provision PostgreSQL for Olist** (`provision_olist_postgres.yml`). **Must run after Terraform Base (Dev)** — Postgres Terraform reads base state (delegated subnet, private DNS). It does **not** need to run after Terraform Databricks; Postgres and Databricks can be provisioned in either order after base. **If Databricks will ingest from PostgreSQL (Olist):** run Base → **Postgres** (apply + bootstrap to load data) → **Databricks** so the database is ready before running ingestion jobs. Add **`GH_PAT`** for runner registration. **action:** `plan` \| `apply` \| `destroy` (Terraform only); **`full`** = apply + register + load (no `POSTGRES_*`); **`register_only`** = install self-hosted runner on bootstrap VM (needs **GH_PAT**); **`bootstrap_only`** = load CSVs into Postgres (runs on that runner). For **`full`** or **`bootstrap_only`**, the workflow also installs the **data-engineering toolbox** (psql, Python, psycopg2, pandas, git, jq) on the runner VM — see [docs/TOOLBOX.md](docs/TOOLBOX.md). **Sequence:** plan → apply → **register_only** (then wait until runner shows **Idle** in Settings → Actions → Runners) → **bootstrap_only** → destroy. **If you get `LocationIsOfferRestricted`** for PostgreSQL: your subscription may restrict that region; [request a quota increase](https://aka.ms/postgres-request-quota-increase) or ensure the base layer is in an allowed region (default: **East US 2**).
+**Olist PostgreSQL (optional):** Single workflow **Provision PostgreSQL for Olist** (`provision_olist_postgres.yml`). **Must run after Terraform Base (Dev)** — Postgres Terraform reads base state (delegated subnet, private DNS). It does **not** need to run after Terraform Databricks; Postgres and Databricks can be provisioned in either order after base. **If Databricks will ingest from PostgreSQL (Olist):** run Base → **Postgres** (apply + bootstrap to load data) → **Databricks** so the database is ready before running ingestion jobs. Add **`GH_PAT`** for runner registration. **action:** `plan` \| `apply` \| `destroy` (Terraform only); **`full`** = apply + register + load (no `POSTGRES_*`); **`register_only`** = install self-hosted runner on bootstrap VM (needs **GH_PAT**); **`bootstrap_only`** = load CSVs into Postgres (runs on that runner). For **`full`** or **`bootstrap_only`**, the workflow also installs the **data-engineering toolbox** (psql, Python, psycopg2, pandas, git, jq) on the runner VM — see [docs/TOOLBOX.md](docs/TOOLBOX.md). The **VM toolbox** is for one-time/ad-hoc loads and Postgres inspection; **scheduled** Postgres → RAW ingestion is done by the **Azure Function**. **Sequence:** plan → apply → **register_only** (then wait until runner shows **Idle** in Settings → Actions → Runners) → **bootstrap_only** → destroy. **If you get `LocationIsOfferRestricted`** for PostgreSQL: your subscription may restrict that region; [request a quota increase](https://aka.ms/postgres-request-quota-increase) or ensure the base layer is in an allowed region (default: **East US 2**).
+
+**Postgres Ingest Function (optional):** **Provision Postgres Ingest Function** (`provision_postgres_ingest_function.yml`). Run **after** Terraform Base (Dev) and **after** Postgres (apply). **action:** `plan` \| `apply` \| `destroy`. On **apply**, the workflow runs Terraform (Function App, subnet, managed identity, role on ADLS) and then deploys the function code from `functions/postgres_to_raw` (timer-triggered Postgres → RAW). Uses same OIDC secrets as other Terraform workflows. Postgres connection is read from Postgres Terraform state.
 
 **Optional:** Run **Provision Terraform State Backend (Prod)** (`provision-tfstate-prod.yml`) when you need a separate prod state backend; then use prod Terraform workflows (when added) in the same order (base → databricks).
 
 **Tests:** Run `tests.yml` anytime (no dependency on infra).
 
-**Destroy (tear down all infra):** Run **Terraform Databricks (Dev)** with `action: destroy` first, then **Terraform Base (Dev)** with `action: destroy`. Order matters (Databricks depends on base). To remove Olist Postgres only, run **Provision PostgreSQL for Olist** with `action: destroy`.
+**Destroy (tear down all infra):** Run **Terraform Databricks (Dev)** with `action: destroy` first, then **Terraform Base (Dev)** with `action: destroy`. Order matters (Databricks depends on base). To remove Olist Postgres only, run **Provision PostgreSQL for Olist** with `action: destroy`. To remove the Postgres Ingest Function only, run **Provision Postgres Ingest Function** with `action: destroy`.
 
 ---
 
@@ -200,7 +207,8 @@ All workflows are **manual** (`workflow_dispatch`) unless noted.
 - **deploy-jobs.yml:** Deploy/update Databricks jobs from repo.
 - **promote-environment.yml:** Promote to prod or stg (workflow offers both; config + optional Terraform).
 - **tests.yml:** Pytest unit tests + Ruff lint.
-- **provision_olist_postgres.yml:** Single Olist workflow. **Run after Terraform Base (Dev)** only (not after Databricks). For Databricks ingestion from Postgres: Base → Postgres (apply + bootstrap) → Databricks. **action:** `plan` \| `apply` \| `destroy` \| **`full`** (apply + register + load; no `POSTGRES_*`) \| **`register_only`** (install runner; **GH_PAT**) \| **`bootstrap_only`** (load data; connection from Terraform state after `apply` — no `POSTGRES_*` needed). Sequence: plan → apply → register_only → bootstrap_only → destroy.
+- **provision_olist_postgres.yml:** Single Olist workflow. **Run after Terraform Base (Dev)** only (not after Databricks). For Databricks ingestion from Postgres: Base → Postgres (apply + bootstrap) → Databricks. **action:** `plan` \| `apply` \| `destroy` \| **`full`** \| **`register_only`** \| **`bootstrap_only`**. Sequence: plan → apply → register_only → bootstrap_only → destroy. VM toolbox = one-time/ad-hoc + inspection; scheduled ingestion = Azure Function.
+- **provision_postgres_ingest_function.yml:** Azure Function (Postgres → ADLS RAW). **Run after Terraform Base (Dev) and after Postgres (apply).** **action:** `plan` \| `apply` \| `destroy`. On apply, deploys function code from `functions/postgres_to_raw`.
 
 Workflows live in [.github/workflows/](.github/workflows/).
 

@@ -8,7 +8,7 @@ The platform is built around this flow (e.g. for Olist / retail data):
 PostgreSQL (source, e.g. Olist)
       │
       ▼
-CDC ingestion (Python / VM toolbox)  →  captures changes, writes to RAW
+Azure Function  (timer-triggered)  →  reads Postgres, writes to RAW
       │
       ▼
 ADLS RAW  (immutable, partition by ingestion_date)
@@ -28,10 +28,11 @@ Analytics marts  (Power BI, Tableau, reporting)
 
 ---
 
-## Postgres → CDC to RAW
+## Postgres → Azure Function to RAW
 
-- **Source:** Azure Database for PostgreSQL Flexible Server (e.g. Olist schema), private in the base VNet. Provisioned via `terraform/postgres`; initial load via **Provision PostgreSQL for Olist** workflow.
-- **CDC ingestion:** A Python process runs on the **VM toolbox** (bootstrap VM). It reads changes from Postgres (logical decoding / WAL, or query-based incremental) and writes records to ADLS Gen2 under `/data/raw/<entity>/ingestion_date=YYYY-MM-DD/`. The toolbox has psql, Python, psycopg2, and network access to both Postgres and the storage account. See [TOOLBOX.md](TOOLBOX.md).
+- **Source:** Azure Database for PostgreSQL Flexible Server (e.g. Olist schema), private in the base VNet. Provisioned via `terraform/postgres`; initial load via **Provision PostgreSQL for Olist** workflow (VM toolbox runs the one-time CSV COPY).
+- **Scheduled ingestion:** An **Azure Function** (timer-triggered, e.g. every 15 min) runs in the base VNet (VNet integration), reads from Postgres (query-based incremental or full), and writes to ADLS Gen2 under the RAW container (e.g. `<entity>/ingestion_date=YYYY-MM-DD/`). Provision via **Provision Postgres Ingest Function** workflow (`provision_postgres_ingest_function.yml`) — run after Terraform Base (Dev) and Postgres (apply). Code: `functions/postgres_to_raw`. The function uses managed identity for ADLS and app settings for Postgres connection (from Postgres Terraform state).
+- **VM toolbox:** Used for **one-time or ad-hoc loads** (e.g. initial Olist load) and **inspecting Postgres** (psql, Python). It is **not** used for scheduled Postgres → RAW ingestion. See [TOOLBOX.md](TOOLBOX.md).
 - **RAW:** Immutable; append-only; partition by `ingestion_date`. Supports replay and schema evolution. Other sources (REST APIs, CSVs) can also be ingested to RAW by notebooks or pipelines.
 
 ---
@@ -39,7 +40,7 @@ Analytics marts  (Power BI, Tableau, reporting)
 ## RAW → Bronze → Gold (Databricks)
 
 1. **Ingestion to RAW**  
-   CDC (Postgres) or notebooks (APIs, files) write **unchanged** payloads into ADLS Gen2 under `/data/raw/<entity>/ingestion_date=YYYY-MM-DD/`. Metadata (e.g. `_ingestion_ts`, `_source_file`) can be added at write time.
+   The **Azure Function** (Postgres → RAW) or notebooks (APIs, files) write **unchanged** payloads into ADLS Gen2 under the RAW container (e.g. `<entity>/ingestion_date=YYYY-MM-DD/`). Metadata (e.g. `_ingestion_ts`, `_source_file`) can be added at write time.
 
 2. **RAW → BRONZE**  
    Delta Live Tables or batch notebooks read from RAW paths, parse (flatten JSON, parse CSV), enforce schema, add audit columns, and write Delta tables in the Bronze schema. Incremental processing by `ingestion_date` or checkpoint.
@@ -60,7 +61,7 @@ Analytics marts  (Power BI, Tableau, reporting)
 
 | Source | Ingestion | RAW Path | Bronze Table | Silver Table | Gold Usage |
 |--------|-----------|----------|--------------|--------------|------------|
-| **PostgreSQL (Olist)** | **CDC (Python / VM toolbox)** | `/data/raw/orders/`, `customers/`, `order_items/`, etc. | `bronze_orders`, etc. | `silver_orders`, etc. | `fact_orders`, `dim_customer`, marts |
+| **PostgreSQL (Olist)** | **Azure Function (scheduled)**; VM toolbox = one-time load + inspection | `orders/`, `customers/`, `order_items/`, etc. under RAW container | `bronze_orders`, etc. | `silver_orders`, etc. | `fact_orders`, `dim_customer`, marts |
 | Orders API | Notebooks | `/data/raw/orders/` | `bronze_orders` | `silver_orders` | `fact_orders`, daily revenue |
 | Customers API | Notebooks | `/data/raw/customers/` | `bronze_customers` | `silver_customers` | `dim_customer` (SCD2) |
 | Products CSV | Notebooks | `/data/raw/products/` | `bronze_products` | `silver_products` | `dim_product` |

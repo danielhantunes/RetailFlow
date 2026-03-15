@@ -1,0 +1,135 @@
+# Azure Function: Postgres → ADLS RAW ingestion.
+# Run manually after Terraform Base (Dev) and Provision PostgreSQL for Olist (apply).
+# Actions: plan | apply | destroy. On apply, deploys the function code from functions/postgres_to_raw.
+
+name: Provision Postgres Ingest Function
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Terraform action'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+        default: plan
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: provision-postgres-ingest-function-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TF_VERSION: '1.5.0'
+  ARM_USE_OIDC: true
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  TF_BACKEND_RESOURCE_GROUP: retailflow-dev-tfstate-rg
+  TF_BACKEND_STORAGE_ACCOUNT: retailflowdevtfstate
+  TF_BACKEND_CONTAINER: tfstate
+  TF_BACKEND_KEY: retailflow-postgres-ingest-function.tfstate
+  TF_VAR_tfstate_resource_group_name: retailflow-dev-tfstate-rg
+  TF_VAR_tfstate_storage_account_name: retailflowdevtfstate
+  TF_VAR_tfstate_container_name: tfstate
+  TF_VAR_tfstate_base_key: retailflow-dev-base.tfstate
+  TF_VAR_tfstate_postgres_key: retailflow-ingest-pg.tfstate
+
+jobs:
+  terraform:
+    name: Terraform ${{ github.event.inputs.action }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform/postgres_ingest_function
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: |
+          echo "==> Initializing Terraform (backend key: $TF_BACKEND_KEY)"
+          terraform init \
+            -backend-config="resource_group_name=$TF_BACKEND_RESOURCE_GROUP" \
+            -backend-config="storage_account_name=$TF_BACKEND_STORAGE_ACCOUNT" \
+            -backend-config="container_name=$TF_BACKEND_CONTAINER" \
+            -backend-config="key=$TF_BACKEND_KEY"
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        if: github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply'
+        run: terraform plan -no-color -input=false
+
+      - name: Terraform Apply
+        if: github.event.inputs.action == 'apply'
+        run: terraform apply -auto-approve -no-color -input=false
+
+      - name: Terraform Destroy
+        if: github.event.inputs.action == 'destroy'
+        run: terraform destroy -auto-approve -no-color -input=false
+
+  deploy:
+    name: Deploy function code
+    needs: terraform
+    if: github.event.inputs.action == 'apply' && success()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Get Function App name and RG
+        id: tf-out
+        working-directory: terraform/postgres_ingest_function
+        run: |
+          terraform init -backend-config="resource_group_name=${{ env.TF_BACKEND_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ env.TF_BACKEND_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ env.TF_BACKEND_CONTAINER }}" \
+            -backend-config="key=${{ env.TF_BACKEND_KEY }}" -input=false
+          echo "rg=$(terraform output -raw function_app_resource_group)" >> $GITHUB_OUTPUT
+          echo "name=$(terraform output -raw function_app_name)" >> $GITHUB_OUTPUT
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies and create zip
+        working-directory: functions/postgres_to_raw
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt --target .python_packages/lib/site-packages
+          zip -r ../../postgres_to_raw.zip . -x "*.pyc" -x "__pycache__/*" -x ".git*" -x "*.zip"
+
+      - name: Deploy function code to Azure
+        run: |
+          az functionapp deployment source config-zip \
+            -g ${{ steps.tf-out.outputs.rg }} \
+            -n ${{ steps.tf-out.outputs.name }} \
+            --src postgres_to_raw.zip

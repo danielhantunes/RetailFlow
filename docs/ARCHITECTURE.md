@@ -2,11 +2,11 @@
 
 ## Overview
 
-RetailFlow is an enterprise data platform for a retail company, built on **Azure Databricks** with a **medallion architecture** (RAW → BRONZE → SILVER → GOLD). **Target flow:** PostgreSQL (e.g. Olist) → CDC ingestion (Python / VM toolbox) → ADLS RAW → Databricks Bronze → Silver → Snowflake Gold → dbt models → analytics marts. It also supports other sources (REST APIs, CSVs, etc.) ingested to RAW via notebooks. See [DATA_FLOW.md](DATA_FLOW.md).
+RetailFlow is an enterprise data platform for a retail company, built on **Azure Databricks** with a **medallion architecture** (RAW → BRONZE → SILVER → GOLD). **Target flow:** PostgreSQL (e.g. Olist) → **Azure Function** (timer) → ADLS RAW → Databricks Bronze → Silver → Snowflake Gold → dbt models → analytics marts. **VM toolbox** = one-time/ad-hoc loads and Postgres inspection only. Other sources (REST APIs, CSVs) ingested to RAW via notebooks. See [DATA_FLOW.md](DATA_FLOW.md).
 
 ## High-Level Architecture
 
-**Target flow:** PostgreSQL → CDC (VM toolbox) → ADLS RAW → Databricks Bronze/Silver → Snowflake Gold → dbt → Analytics marts.
+**Target flow:** PostgreSQL → **Azure Function** → ADLS RAW → Databricks Bronze/Silver → Snowflake Gold → dbt → Analytics marts.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -19,9 +19,9 @@ RetailFlow is an enterprise data platform for a retail company, built on **Azure
           │                 │             │             │             │
           ▼                 │             │             │             │
 ┌─────────────────────────┐ │             │             │             │
-│ CDC ingestion           │ │             │             │             │
-│ (Python / VM toolbox)   │ │             │             │             │
-│ → writes to RAW         │ │             │             │             │
+│ Azure Function          │ │             │             │             │
+│ (Postgres → RAW, timer)  │ │             │             │             │
+│ VM toolbox = ad-hoc only│ │             │             │             │
 └─────────┬───────────────┘ │             │             │             │
           │                 ▼             ▼             ▼             ▼
           │         ┌─────────────────────────────────────────────────────────────┐

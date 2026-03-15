@@ -9,6 +9,7 @@ RetailFlow/
 │       ├── terraform-base-dev.yml
 │       ├── terraform-databricks-dev.yml
 │       ├── provision_olist_postgres.yml   # Optional: Olist PostgreSQL (plan/apply/destroy/full/register_only/bootstrap_only)
+│       ├── provision_postgres_ingest_function.yml   # Azure Function Postgres → RAW (plan/apply/destroy; run after base + postgres)
 │       ├── deploy-notebooks.yml
 │       ├── deploy-jobs.yml
 │       ├── promote-environment.yml
@@ -67,6 +68,8 @@ RetailFlow/
 │           └── marts/
 │               ├── daily_revenue.sql
 │               └── sources.yml
+├── functions/
+│   └── postgres_to_raw/          # Azure Function (timer): Postgres → ADLS RAW (function_app.py, host.json, requirements.txt)
 ├── databaseinput/                # Brazilian E-Commerce (Olist) dataset ZIP
 ├── sql/
 │   └── create_tables.sql         # Olist table DDL
@@ -86,6 +89,11 @@ RetailFlow/
 │   │   ├── main.tf
 │   │   ├── variables.tf
 │   │   └── outputs.tf
+│   ├── postgres_ingest_function/ # Optional: Azure Function Postgres → ADLS RAW (run after base + postgres)
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   ├── outputs.tf
+│   │   └── README.md
 │   ├── databricks/               # Layer 2: Databricks workspace
 │   │   ├── main.tf
 │   │   ├── databricks_resources.tf   # Job + cluster definitions

@@ -24,8 +24,8 @@
 
 ## 5. Run ingestion and pipelines
 
-- **Target flow:** PostgreSQL → CDC (Python / VM toolbox) → ADLS RAW → Databricks Bronze/Silver → Snowflake Gold → dbt → analytics marts. See [DATA_FLOW.md](DATA_FLOW.md) and [README — Target data flow](../README.md#target-data-flow).
-- **CDC from Postgres:** Implement a Python CDC process on the VM toolbox that reads from Azure PostgreSQL (logical decoding or query-based) and writes to ADLS RAW. The toolbox has psql, Python, psycopg2; see [TOOLBOX.md](TOOLBOX.md). Initial Olist load is done by the Provision PostgreSQL for Olist workflow (CSV COPY).
+- **Target flow:** PostgreSQL → **Azure Function** (timer) → ADLS RAW → Databricks Bronze/Silver → Snowflake Gold → dbt → analytics marts. See [DATA_FLOW.md](DATA_FLOW.md) and [README — Target data flow](../README.md#target-data-flow).
+- **Postgres → RAW (scheduled):** Run **Provision Postgres Ingest Function** (`provision_postgres_ingest_function.yml`) after Terraform Base (Dev) and Postgres (apply). The workflow provisions the Azure Function App (VNet integration, managed identity, role on ADLS) and deploys the code from `functions/postgres_to_raw`. The function runs on a timer and reads from Postgres, writes to ADLS RAW. **VM toolbox** is for one-time/ad-hoc loads and Postgres inspection only; see [TOOLBOX.md](TOOLBOX.md). Initial Olist load is done by the Provision PostgreSQL for Olist workflow (CSV COPY on the VM).
 - Run RAW ingestion notebooks (orders, customers, products, etc.) for other sources; validate files under RAW paths.
 - Run Bronze notebooks/DLT to populate Bronze tables; then Silver, then Gold.
 - Run the main pipeline job (provisioned by Terraform in `terraform/databricks/databricks_resources.tf`; adjust notebook paths in Terraform if needed, e.g. Repos path).
