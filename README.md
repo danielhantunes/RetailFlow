@@ -112,7 +112,7 @@ Analytics marts  (Power BI, Tableau, reporting)
 ```
 
 - **PostgreSQL:** Operational source (e.g. Azure PostgreSQL with Olist data). Provisioned via Terraform; initial load via `provision_olist_postgres.yml`.
-- **Scheduled ingestion:** An **Azure Function** (Postgres → RAW) runs on a timer (e.g. every 15 min), reads from Postgres (query-based), and writes to ADLS RAW. Provision via **Provision Postgres Ingest Function** workflow (run after Base and Postgres). See [docs/DATA_FLOW.md](docs/DATA_FLOW.md#postgres--azure-function-to-raw).
+- **Scheduled ingestion:** An **Azure Function** (Postgres → RAW) runs on a timer (e.g. every 15 min), reads from Postgres (query-based), and writes to ADLS RAW. Provision via **Provision Postgres Ingest Function** workflow (run after Base and Postgres). See [docs/DATA_FLOW.md](docs/DATA_FLOW.md#postgres-azure-function-to-raw).
 - **VM toolbox:** The bootstrap VM is used for **one-time or ad-hoc loads** (e.g. initial Olist CSV load) and **inspecting Postgres** (psql, Python scripts). It is not used for scheduled ingestion. See [docs/TOOLBOX.md](docs/TOOLBOX.md).
 - **RAW → Bronze → Silver:** Databricks notebooks/DLT; Gold is then synced or exposed to **Snowflake** for serving; **dbt** builds marts on Gold.
 
