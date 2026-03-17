@@ -172,7 +172,7 @@ resource "azurerm_private_endpoint" "storage_blob" {
   tags = var.tags
 }
 
-# Bootstrap VM: self-hosted runner for Olist CSV → PostgreSQL COPY. Private only (same VNet as Postgres). Use Bastion or VPN to SSH.
+# Bootstrap VM: self-hosted runner for Olist CSV → PostgreSQL COPY. Private only (same VNet as Postgres). Optional browser SSH: deploy Azure Bastion via terraform/bastion + Terraform Bastion (Dev) workflow (destroy when idle to save cost).
 resource "azurerm_subnet" "bootstrap_vm" {
   name                 = "${local.name_prefix}-bootstrap-vm"
   resource_group_name  = azurerm_resource_group.rg.name
