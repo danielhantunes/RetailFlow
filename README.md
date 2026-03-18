@@ -60,6 +60,7 @@ RetailFlow/
 │   ├── NEXT_STEPS.md
 │   ├── RAW_LAYER_DESIGN.md
 │   ├── REPOSITORY_TREE.md
+│   ├── BASTION.md             # Azure Bastion (Basic) on-demand browser SSH
 │   ├── TOOLBOX.md             # Data-engineering toolbox on bootstrap VM (psql, Python, Key Vault)
 │   ├── UNITY_CATALOG.md
 │   └── OBSERVABILITY.md
