@@ -6,12 +6,12 @@ Deploy **after** [Terraform Base (Dev)](../base). Use **Terraform Bastion (Dev)*
 
 **State:** `retailflow-dev-bastion.tfstate`
 
-**Resources:** `AzureBastionSubnet` in the base VNet, Standard public IP, Bastion host (SKU input, default **Standard**), and optional RBAC assignment (`Virtual Machine Administrator Login`) on the bootstrap VM for provided Entra Object IDs.
+**Resources:** `AzureBastionSubnet` in the base VNet, Standard public IP, Bastion host (**Standard**, fixed), and optional RBAC assignment (`Virtual Machine Administrator Login`) on the bootstrap VM for provided Entra Object IDs.
 
 ## Entra ID login notes
 
 - Base layer enables `AADSSHLoginForLinux` extension on the bootstrap VM by default (`bootstrap_vm_enable_entra_login = true`).
 - In the Bastion workflow, pass `aad_admin_object_id` (your Entra Object ID) to grant VM login role.
-- For Bastion connect flow with Entra auth in Portal, use `bastion_sku = Standard`.
+- Bastion is fixed to **Standard** in this layer (no SKU input).
 
 **Migration:** If Bastion was previously in `terraform/base`, run **Terraform Base (Dev) apply** first (removes Bastion from base state), then **Terraform Bastion (Dev) apply** to recreate under this state.

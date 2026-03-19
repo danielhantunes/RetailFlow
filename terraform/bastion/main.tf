@@ -55,7 +55,7 @@ resource "azurerm_bastion_host" "main" {
   name                = "${local.name_prefix}-bastion"
   location            = local.location
   resource_group_name = local.base_rg
-  sku                 = var.bastion_sku
+  sku                 = "Standard"
   tags                = var.tags
 
   ip_configuration {

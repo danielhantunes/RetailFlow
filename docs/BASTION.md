@@ -1,4 +1,4 @@
-# Azure Bastion — On-demand Browser SSH
+# Azure Bastion (Standard) — On-demand Browser SSH
 
 Use Azure Bastion to connect to the **private** bootstrap VM (`retailflow-dev-bootstrap-vm`) without exposing SSH on the public internet. Bastion is deployed in its own Terraform layer so you can **destroy it when idle** to save hourly cost.
 
@@ -14,11 +14,11 @@ Ongoing Postgres → ADLS RAW ingestion is handled by the **Azure Function**, no
 ## 2. Prerequisites
 
 1. Terraform **Base (Dev)** has been applied (creates the VNet + the private bootstrap VM).
-2. Terraform **Bastion (Dev)** has been applied (creates `AzureBastionSubnet` + Bastion + public IP).
+2. Terraform **Bastion (Dev)** has been applied (creates `AzureBastionSubnet` + Bastion **Standard** + public IP).
 3. For Microsoft Entra ID login on the VM:
    - Base layer has `AADSSHLoginForLinux` extension enabled (default),
    - Your Entra user is granted VM login role via Bastion workflow input `aad_admin_object_id`,
-   - Bastion SKU is set to `Standard` (recommended for Entra login flow in Portal).
+   - Bastion is **Standard** in this project (mandatory in Terraform).
 
 ## 3. Connect via the Azure Portal (browser SSH)
 

@@ -26,16 +26,6 @@ variable "azure_bastion_subnet_cidr" {
   default     = "10.139.7.0/26"
 }
 
-variable "bastion_sku" {
-  description = "Azure Bastion SKU. Use Standard for Microsoft Entra ID auth in Bastion connect flow."
-  type        = string
-  default     = "Standard"
-  validation {
-    condition     = contains(["Basic", "Standard", "Premium"], var.bastion_sku)
-    error_message = "bastion_sku must be one of: Basic, Standard, Premium."
-  }
-}
-
 variable "aad_admin_object_ids" {
   description = "List of Microsoft Entra object IDs to grant Virtual Machine Administrator Login on bootstrap VM."
   type        = list(string)
