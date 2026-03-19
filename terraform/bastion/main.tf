@@ -1,4 +1,4 @@
-# Azure Bastion (Basic) — optional layer. Deploy after Terraform Base (Dev); destroy when idle to save cost.
+# Azure Bastion — optional layer. Deploy after Terraform Base (Dev); destroy when idle to save cost.
 # State: retailflow-dev-bastion.tfstate
 
 terraform {
@@ -55,7 +55,7 @@ resource "azurerm_bastion_host" "main" {
   name                = "${local.name_prefix}-bastion"
   location            = local.location
   resource_group_name = local.base_rg
-  sku                 = "Basic"
+  sku                 = var.bastion_sku
   tags                = var.tags
 
   ip_configuration {
@@ -63,4 +63,12 @@ resource "azurerm_bastion_host" "main" {
     subnet_id            = azurerm_subnet.azure_bastion.id
     public_ip_address_id = azurerm_public_ip.bastion.id
   }
+}
+
+# VM login role for Microsoft Entra ID SSH login on bootstrap VM.
+resource "azurerm_role_assignment" "bootstrap_vm_admin_login" {
+  for_each             = toset(var.aad_admin_object_ids)
+  scope                = data.terraform_remote_state.base.outputs.bootstrap_vm_id
+  role_definition_name = "Virtual Machine Administrator Login"
+  principal_id         = each.value
 }

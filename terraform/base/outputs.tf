@@ -57,6 +57,11 @@ output "bootstrap_vm_private_ip" {
   description = "Private IP for SSH via Bastion or from within VNet"
 }
 
+output "bootstrap_vm_id" {
+  value       = azurerm_linux_virtual_machine.bootstrap.id
+  description = "Resource ID of bootstrap VM (used by Bastion layer RBAC for VM login)"
+}
+
 output "bootstrap_vm_admin_password" {
   value       = var.bootstrap_vm_ssh_public_key != "" ? null : random_password.bootstrap_vm_admin.result
   sensitive   = true

@@ -35,3 +35,9 @@ variable "bootstrap_vm_ssh_public_key" {
   default     = ""
   sensitive   = true
 }
+
+variable "bootstrap_vm_enable_entra_login" {
+  description = "Enable Microsoft Entra ID (Azure AD) SSH login extension on bootstrap VM."
+  type        = bool
+  default     = true
+}

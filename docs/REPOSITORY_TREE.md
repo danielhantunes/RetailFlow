@@ -7,7 +7,7 @@ RetailFlow/
 │       ├── provision-tfstate-dev.yml
 │       ├── provision-tfstate-prod.yml
 │       ├── terraform-base-dev.yml
-│       ├── terraform-bastion-dev.yml   # Optional Bastion Basic (after base; destroy when idle)
+│       ├── terraform-bastion-dev.yml   # Optional Bastion (default Standard; after base; destroy when idle)
 │       ├── terraform-databricks-dev.yml
 │       ├── provision_olist_postgres.yml   # Optional: Olist PostgreSQL (plan/apply/destroy/full/register_only/bootstrap_only)
 │       ├── provision_postgres_ingest_function.yml   # Azure Function Postgres → RAW (plan/apply/destroy; run after base + postgres)
@@ -95,7 +95,7 @@ RetailFlow/
 │   │   ├── variables.tf
 │   │   ├── outputs.tf
 │   │   └── README.md
-│   ├── bastion/                  # Optional: Azure Bastion Basic (after base; destroy when idle)
+│   ├── bastion/                  # Optional: Azure Bastion layer (after base; destroy when idle)
 │   │   ├── main.tf
 │   │   ├── variables.tf
 │   │   ├── outputs.tf

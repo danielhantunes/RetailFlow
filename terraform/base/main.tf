@@ -272,3 +272,13 @@ resource "azurerm_linux_virtual_machine" "bootstrap" {
 
   tags = var.tags
 }
+
+# Enable Microsoft Entra ID SSH login on Linux VM (used with VM login RBAC roles).
+resource "azurerm_virtual_machine_extension" "bootstrap_aad_ssh_login" {
+  count                = var.bootstrap_vm_enable_entra_login ? 1 : 0
+  name                 = "AADSSHLoginForLinux"
+  virtual_machine_id   = azurerm_linux_virtual_machine.bootstrap.id
+  publisher            = "Microsoft.Azure.ActiveDirectory"
+  type                 = "AADSSHLoginForLinux"
+  type_handler_version = "1.0"
+}

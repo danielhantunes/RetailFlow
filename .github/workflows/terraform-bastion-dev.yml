@@ -1,4 +1,4 @@
-# Azure Bastion (Basic) — optional. Run after Terraform Base (Dev). Destroy when idle to save cost.
+# Azure Bastion (Standard by default) — optional. Run after Terraform Base (Dev). Destroy when idle to save cost.
 # Use for browser SSH to private bootstrap VM (Olist runner). Ongoing Postgres → ADLS: Azure Function.
 
 name: Terraform Bastion (Dev)
@@ -14,6 +14,19 @@ on:
           - apply
           - destroy
         default: plan
+      bastion_sku:
+        description: 'Bastion SKU (use Standard for Entra ID auth in Bastion connect flow)'
+        required: false
+        type: choice
+        options:
+          - Standard
+          - Basic
+          - Premium
+        default: Standard
+      aad_admin_object_id:
+        description: 'Optional Microsoft Entra Object ID to grant Virtual Machine Administrator Login on bootstrap VM'
+        required: false
+        default: ''
 
 permissions:
   id-token: write
@@ -37,6 +50,8 @@ env:
   TF_VAR_tfstate_storage_account_name: retailflowdevtfstate
   TF_VAR_tfstate_container_name: tfstate
   TF_VAR_tfstate_base_key: retailflow-dev-base.tfstate
+  TF_VAR_bastion_sku: ${{ github.event.inputs.bastion_sku }}
+  TF_VAR_aad_admin_object_ids: ${{ github.event.inputs.aad_admin_object_id != '' && format('["{0}"]', github.event.inputs.aad_admin_object_id) || '[]' }}
 
 jobs:
   terraform:
