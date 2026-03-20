@@ -270,6 +270,10 @@ resource "azurerm_linux_virtual_machine" "bootstrap" {
     version   = "latest"
   }
 
+  identity {
+    type = "SystemAssigned"
+  }
+
   tags = var.tags
 }
 
