@@ -152,6 +152,6 @@ RetailFlow/
     ├── OBSERVABILITY.md
     ├── NEXT_STEPS.md
     ├── REPOSITORY_TREE.md
-    ├── BASTION.md                # Azure Bastion (Standard) on-demand browser SSH
+    ├── BASTION.md                # Azure Bastion (Standard) on-demand browser SSH + Entra VM login
     └── TOOLBOX.md                # Data-engineering toolbox on bootstrap VM (psql, Python, Key Vault)
 ```

@@ -38,7 +38,7 @@ RetailFlow/
 │   ├── databricks/           # Layer 2: Databricks workspace (retailflow-dev-dbw, standard)
 │   ├── postgres/             # Optional: Olist PostgreSQL Flexible Server (private, base VNet)
 │   ├── postgres_ingest_function/  # Azure Function: Postgres → ADLS RAW (run after base + postgres)
-│   ├── bastion/              # Optional: Azure Bastion Basic (run after base; destroy when idle to save cost)
+│   ├── bastion/              # Optional: Azure Bastion Standard (run after base; destroy when idle to save cost)
 │   ├── modules/              # Legacy/shared: databricks, storage, key_vault, networking
 │   ├── main.tf               # Legacy single-root (optional)
 │   ├── variables.tf
@@ -184,7 +184,7 @@ All workflows are **manual** (`workflow_dispatch`) unless noted.
    Run with `action: plan`, then `action: apply`. Creates RG, VNet, subnets (with NSGs for Databricks), ADLS Gen2 (`retailflowdevdls`) with containers **raw, bronze, silver, gold**, private endpoint. Must complete before Layer 2.
 
 3. **Terraform Databricks (Dev)** — `terraform-databricks-dev.yml`  
-   Run with `action: plan`, then `action: apply`. Creates workspace `retailflow-dev-dbw`, dev cluster (`retailflow-dev-single-node`), and job `RetailFlow_Main_Pipeline`. Depends on base; run after step 2. **Secrets:** `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `ARM_CLIENT_SECRET`, `AZURE_PRINCIPAL_ID` (Object ID of the service principal; Terraform grants Contributor on the workspace). See [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md).
+   Run with `action: plan`, then `action: apply`. Creates workspace `retailflow-dev-dbw`, dev cluster (`retailflow-dev-single-node`), and job `RetailFlow_Main_Pipeline`. Depends on base; run after step 2. **Secrets:** `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_PRINCIPAL_ID` (Object ID of the service principal; Terraform grants Contributor on the workspace). **OIDC only** — no client secret for this workflow. See [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md).
 
 4. **After infra is up (any order):** deploy notebooks (`deploy-notebooks.yml`), deploy jobs (`deploy-jobs.yml`), configure secret scope, bootstrap RAW, run Airflow DAGs, dbt marts, sync Gold to Snowflake (when configured), monitoring.
 
@@ -208,7 +208,7 @@ All workflows are **manual** (`workflow_dispatch`) unless noted.
 - **provision-tfstate-prod.yml:** Prod Terraform state backend. Run when you need separate prod state.
 - **terraform-base-dev.yml:** Layer 1 – base infra only. Input: `action` (plan \| apply \| destroy). Step 2.
 - **terraform-bastion-dev.yml:** Optional Azure Bastion (**Standard**). After base. Input: optional `aad_admin_object_id` for VM Entra login role assignment. `destroy` when idle to save cost.
-- **terraform-databricks-dev.yml:** Layer 2 – workspace, dev cluster, main pipeline job. Databricks: **Azure AD** (same service principal + `ARM_CLIENT_SECRET`). Input: `action` (plan \| apply \| destroy). Step 3.
+- **terraform-databricks-dev.yml:** Layer 2 – workspace, dev cluster, main pipeline job. Databricks: **Azure AD** via OIDC (same service principal; no `ARM_CLIENT_SECRET`). Input: `action` (plan \| apply \| destroy). Step 3.
 - **deploy-notebooks.yml:** Sync notebooks to Databricks (e.g. via Repos).
 - **deploy-jobs.yml:** Deploy/update Databricks jobs from repo.
 - **promote-environment.yml:** Promote to prod or stg (workflow offers both; config + optional Terraform).
@@ -218,7 +218,7 @@ All workflows are **manual** (`workflow_dispatch`) unless noted.
 
 Workflows live in [.github/workflows/](.github/workflows/).
 
-**Secrets:** Terraform Azure (OIDC): `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (passed as `ARM_*`). Terraform Databricks (Azure AD): same app + `ARM_CLIENT_SECRET` and `AZURE_PRINCIPAL_ID` (Object ID of the service principal; used to grant Contributor on the workspace via Terraform). See [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md). Optional (deploy-notebooks/jobs): `DATABRICKS_HOST`, `DATABRICKS_TOKEN`. Promote: `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`. **Olist:** **`GH_PAT`** for `full` and `register_only`. **`POSTGRES_*`** optional for `bootstrap_only` (used only if Terraform state has no outputs).
+**Secrets:** Terraform Azure (OIDC): `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (passed as `ARM_*`). Terraform Databricks (Dev): same OIDC app + **`AZURE_PRINCIPAL_ID`** (service principal Object ID for workspace Contributor assignment); **no** `ARM_CLIENT_SECRET` for this workflow. See [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md). Optional (deploy-notebooks/jobs): `DATABRICKS_HOST`, `DATABRICKS_TOKEN`. Promote: `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`. **Olist:** **`GH_PAT`** for `full` and `register_only`. **`POSTGRES_*`** optional for `bootstrap_only` (used only if Terraform state has no outputs).
 
 ---
 
@@ -251,7 +251,7 @@ See [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md) for implementation checklist. **Fir
 ## Troubleshooting
 
 - **ContainerNotFound** when running Terraform Base (Dev): The state backend workflow may have created the resource group and storage account but not the **tfstate** container (e.g. due to Azure eventual consistency). In Azure Portal, open the storage account **retailflowdevtfstate** → **Containers** → create a container named **tfstate**. Then re-run Terraform Base (Dev). See [terraform/backend/README.md](terraform/backend/README.md#troubleshooting).
-- **AuthorizationFailed** on `roleAssignments/write` when running Terraform Databricks (Dev): The service principal needs **User Access Administrator** (or Owner) on the subscription or resource group to create the workspace Contributor assignment. Grant that role in Azure Portal (Subscription or **retailflow-dev-rg** → Access control (IAM) → Add role assignment). See [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md).
+- **AuthorizationFailed** on `roleAssignments/write` when running **Terraform Databricks (Dev)** or **Terraform Bastion (Dev)** (`bootstrap_vm_admin_login`): The GitHub Actions service principal needs **User Access Administrator** (or Owner) on the subscription or resource group to create role assignments. Grant that role in Azure Portal (Subscription or **retailflow-dev-rg** → Access control (IAM) → Add role assignment). For Databricks, see [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md). For Bastion: if you cannot grant that permission, leave `aad_admin_object_id` / `AAD_ADMIN_OBJECT_ID` empty and assign **Virtual Machine Administrator Login** (or User Login) to your user on the bootstrap VM manually in Portal → VM → Access control (IAM); Bastion + Entra SSH can still work. See [docs/BASTION.md](docs/BASTION.md).
 - **Olist: "Load dataset into Postgres" stuck on "Waiting for a runner to pick up this job":** The bootstrap job runs on a **self-hosted** runner (the bootstrap VM). You must run **register_only** first so the runner is installed and registered. After **register_only** completes, in GitHub go to **Settings → Actions → Runners** and wait until a runner with labels `self-hosted`, `linux` shows status **Idle**. Then run **bootstrap_only**. If it still waits: confirm the bootstrap VM is running in Azure (resource group and VM name match the workflow inputs, default `retailflow-dev-rg` / `retailflow-dev-bootstrap-vm`), and that the **Install runner on VM** step in the register_only run succeeded (the workflow now fails that step if Azure run-command fails).
 
 ---

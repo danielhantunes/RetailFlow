@@ -17,7 +17,7 @@ Ongoing Postgres → ADLS RAW ingestion is handled by the **Azure Function**, no
 2. Terraform **Bastion (Dev)** has been applied (creates `AzureBastionSubnet` + Bastion **Standard** + public IP).
 3. For Microsoft Entra ID login on the VM:
    - Base layer has `AADSSHLoginForLinux` extension enabled (default),
-   - Your Entra user is granted VM login role via Bastion workflow input `aad_admin_object_id`,
+   - Your Entra user has a VM login role (**Virtual Machine Administrator Login** or **Virtual Machine User Login**), either from Terraform (workflow input `aad_admin_object_id` or repo variable `AAD_ADMIN_OBJECT_ID`) **or** assigned manually on the VM in Azure Portal → **Access control (IAM)**. If Terraform apply fails with **403** on `roleAssignments/write`, grant **User Access Administrator** (or Owner) to the pipeline service principal, or skip Terraform role assignment and add the VM role for your user in the Portal.
    - Bastion is **Standard** in this project (mandatory in Terraform).
 
 ## 3. Connect via the Azure Portal (browser SSH)
