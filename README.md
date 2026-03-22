@@ -61,10 +61,10 @@ RetailFlow/
 │   ├── RAW_LAYER_DESIGN.md
 │   ├── REPOSITORY_TREE.md
 │   ├── BASTION.md             # Azure Bastion (Standard) on-demand browser SSH
-│   ├── TOOLBOX.md             # Data-engineering toolbox on bootstrap VM (psql, Python, Key Vault)
+│   ├── TOOLBOX.md             # Toolbox on bootstrap VM (psql, Python); Bastion + Entra to connect
 │   ├── UNITY_CATALOG.md
 │   └── OBSERVABILITY.md
-├── .github/workflows/         # CI/CD: provision tfstate, terraform base/databricks, deploy notebooks/jobs, promote env, tests
+├── .github/workflows/         # CI/CD: tfstate, base, databricks, bastion, olist postgres, postgres ingest fn, deploy, promote, tests
 ├── .gitignore
 └── README.md
 ```
@@ -159,7 +159,7 @@ Main pipeline job **RetailFlow_Main_Pipeline** is defined and provisioned in Ter
 
 **Default region:** All resources (state backend, base, Databricks, optional PostgreSQL) use **East US 2** by default to avoid subscription restrictions (e.g. `LocationIsOfferRestricted` for PostgreSQL in East US). Override via workflow inputs or Terraform variables if needed.
 
-Infrastructure is split into **two layers** so base infra and Databricks can be managed (and destroyed) independently. We use **OIDC + GitHub Actions** for remote state and for running Terraform (no Azure client secret).
+The **primary** split is **Layer 1 (base)** vs **Layer 2 (Databricks)** so core networking/storage and the workspace can be managed (and destroyed) independently. **Optional** Terraform states (Bastion, Postgres, Postgres ingest function) sit beside that split. We use **OIDC + GitHub Actions** for Terraform in CI (no client secret for those OIDC workflows).
 
 - **State backend first:** Run **Provision Terraform State Backend (Dev)** (creates `retailflow-dev-tfstate-rg`, storage `retailflowdevtfstate`). Optionally run **Provision Terraform State Backend (Prod)** for prod. See [terraform/backend/README.md](terraform/backend/README.md).
 - **Layer 1 – Base (terraform/base):** Resource group, VNet, subnets (Databricks, optional Postgres delegated subnet, bootstrap VM), **Azure Data Lake Storage Gen2** (`retailflowdevdls`) with containers **raw, bronze, silver, gold**, private endpoint. **Azure Bastion is a separate layer** — see below. Managed by **[Terraform Base (Dev)](.github/workflows/terraform-base-dev.yml)** — action: `plan` \| `apply` \| `destroy`. State: `retailflow-dev-base.tfstate`.
