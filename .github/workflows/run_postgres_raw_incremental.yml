@@ -1,0 +1,82 @@
+name: Run Postgres RAW Incremental
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: run-postgres-raw-incremental-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ARM_USE_OIDC: true
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  TF_BACKEND_RESOURCE_GROUP: retailflow-dev-tfstate-rg
+  TF_BACKEND_STORAGE_ACCOUNT: retailflowdevtfstate
+  TF_BACKEND_CONTAINER: tfstate
+  TF_BACKEND_KEY: retailflow-postgres-ingest-function.tfstate
+  FUNCTION_NAME: postgres_to_raw_timer
+
+jobs:
+  run-incremental:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform/postgres_ingest_function
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.0"
+          terraform_wrapper: false
+
+      - name: Resolve Function App from Terraform state
+        id: tf-out
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ env.TF_BACKEND_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ env.TF_BACKEND_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ env.TF_BACKEND_CONTAINER }}" \
+            -backend-config="key=${{ env.TF_BACKEND_KEY }}" \
+            -input=false
+          echo "rg=$(terraform output -raw function_app_resource_group)" >> $GITHUB_OUTPUT
+          echo "name=$(terraform output -raw function_app_name)" >> $GITHUB_OUTPUT
+
+      - name: Set app settings for incremental mode
+        run: |
+          az functionapp config appsettings set \
+            -g "${{ steps.tf-out.outputs.rg }}" \
+            -n "${{ steps.tf-out.outputs.name }}" \
+            --settings INGESTION_MODE=incremental RAW_FORMAT=jsonl > /dev/null
+
+      - name: Trigger timer function once (incremental)
+        run: |
+          master_key=$(az functionapp keys list \
+            -g "${{ steps.tf-out.outputs.rg }}" \
+            -n "${{ steps.tf-out.outputs.name }}" \
+            --query masterKey -o tsv)
+          trigger_url="https://${{ steps.tf-out.outputs.name }}.azurewebsites.net/admin/functions/${{ env.FUNCTION_NAME }}"
+          echo "Invoking: ${trigger_url}"
+          curl --fail --show-error --silent \
+            -X POST "${trigger_url}" \
+            -H "Content-Type: application/json" \
+            -H "x-functions-key: ${master_key}" \
+            -d '{"source":"github-actions","mode":"incremental"}'
+          echo "Incremental run submitted."
