@@ -7,6 +7,7 @@ RetailFlow/
 │       ├── provision-tfstate-dev.yml
 │       ├── provision-tfstate-prod.yml
 │       ├── terraform-base-dev.yml
+│       ├── terraform-adls-dev.yml      # Optional: dedicated ADLS layer (separate state/lifecycle)
 │       ├── terraform-bastion-dev.yml   # Optional Bastion (Standard; after base; destroy when idle)
 │       ├── terraform-databricks-dev.yml
 │       ├── provision_olist_postgres.yml   # Optional: Olist PostgreSQL (plan/apply/destroy/full/register_only/bootstrap_only)
@@ -89,6 +90,7 @@ RetailFlow/
 │   │   ├── outputs.tf
 │   │   └── README.md
 │   ├── postgres/                 # Optional: Olist PostgreSQL Flexible Server (private, base VNet)
+│   ├── adls/                     # Optional: dedicated ADLS Gen2 layer (retailflowdevdls)
 │   │   ├── main.tf
 │   │   ├── variables.tf
 │   │   └── outputs.tf

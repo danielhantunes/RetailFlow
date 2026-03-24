@@ -17,7 +17,7 @@ Azure Function App (timer-triggered) that reads from Azure PostgreSQL and writes
 - **App settings:** Postgres connection (from Postgres state), RAW storage/container, AzureWebJobsStorage.
 - **Runtime controls:** `INGESTION_MODE` (`initial`/`incremental`), `RAW_FORMAT` (`jsonl`), optional `INGEST_TABLE_CONFIG_JSON`, `INGEST_CHUNK_SIZE`, and ADLS watermark checkpoints under `_control/postgres_watermarks/`.
 - **Restart-safe ingestion:** extraction runs in chunks and updates checkpoint cursor (`last_watermark` + `last_pk` + `last_chunk_index`) after each successful chunk write, so reruns continue from the last committed chunk.
-- **Timer schedule app setting:** `POSTGRES_TIMER_SCHEDULE` is set to a low-frequency default so ingestion is typically triggered by GitHub workflows.
+- **Timer schedule app setting:** `POSTGRES_TIMER_SCHEDULE` defaults to every 15 minutes and is the primary scheduler for recurring ingestion in Azure.
 
 ## Backend
 
@@ -36,7 +36,7 @@ Use the same state backend as other layers; key: `retailflow-postgres-ingest-fun
 
 Runtime workflows:
 - `run_postgres_raw_initial_load.yml`: manual one-time trigger (`INGESTION_MODE=initial`).
-- `run_postgres_raw_incremental.yml`: scheduled/manual trigger (`INGESTION_MODE=incremental`, every 15 minutes).
+- `run_postgres_raw_incremental.yml`: manual trigger (`INGESTION_MODE=incremental`) for ad-hoc reruns/backfills.
 
 Run manifests:
 - Each run writes a manifest JSON under `postgres_ingest/_runs/.../run_<id>.json` with table/chunk progress and status.

@@ -109,7 +109,7 @@ resource "azurerm_linux_function_app" "main" {
     "POSTGRES_DB"          = data.terraform_remote_state.postgres.outputs.postgres_db
     "RAW_STORAGE_ACCOUNT"  = data.terraform_remote_state.base.outputs.storage_account_name
     "RAW_CONTAINER"        = var.raw_container_name
-    "POSTGRES_TIMER_SCHEDULE" = "0 0 3 1 1 *"
+    "POSTGRES_TIMER_SCHEDULE" = "0 */15 * * * *"
     "AzureWebJobsStorage" = azurerm_storage_account.function.primary_connection_string
     "FUNCTIONS_WORKER_RUNTIME" = "python"
   }

@@ -2,8 +2,6 @@ name: Run Postgres RAW Incremental
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "*/15 * * * *"
 
 permissions:
   id-token: write
