@@ -31,12 +31,26 @@ locals {
   location  = coalesce(try(local._out.location, null), var.base_location)
   vnet_name = coalesce(try(local._out.vnet_name, null), var.base_vnet_name)
   pe_name   = "retailflow-dev-dls-blob-pe"
+
+  # Prefer explicit ID, then base remote state output, else look up by name (requires base VNet + pe subnet in Azure).
+  pe_subnet_id_from_state = try(local._out.private_endpoints_subnet_id, null)
+  pe_subnet_needs_lookup  = var.create_private_endpoint && var.private_endpoint_subnet_id == null && local.pe_subnet_id_from_state == null
 }
 
 data "azurerm_subnet" "private_endpoints" {
+  count = local.pe_subnet_needs_lookup ? 1 : 0
+
   name                 = var.private_endpoint_subnet_name
   virtual_network_name = local.vnet_name
   resource_group_name  = local.rg_name
+}
+
+locals {
+  private_endpoint_subnet_id_resolved = var.create_private_endpoint ? coalesce(
+    var.private_endpoint_subnet_id,
+    local.pe_subnet_id_from_state,
+    length(data.azurerm_subnet.private_endpoints) > 0 ? data.azurerm_subnet.private_endpoints[0].id : null
+  ) : null
 }
 
 resource "azurerm_storage_account" "dls" {
@@ -61,7 +75,7 @@ resource "azurerm_private_endpoint" "storage_blob" {
   name                = local.pe_name
   location            = local.location
   resource_group_name = local.rg_name
-  subnet_id           = data.azurerm_subnet.private_endpoints.id
+  subnet_id           = local.private_endpoint_subnet_id_resolved
 
   private_service_connection {
     name                           = "${local.pe_name}-psc"

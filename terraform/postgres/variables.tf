@@ -1,5 +1,5 @@
 variable "tfstate_resource_group_name" {
-  description = "Resource group of Terraform state storage (for reading base state). Run Terraform Base (Dev) apply first."
+  description = "Resource group of Terraform state storage. Run Terraform Platform (Dev) apply first."
   type        = string
 }
 

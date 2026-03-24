@@ -1,5 +1,5 @@
 # Azure Function: Postgres → ADLS RAW ingestion.
-# Run manually after Terraform Base (Dev) and Provision PostgreSQL for Olist (apply).
+# Run after Terraform Platform (Dev), Terraform Data Lake (Dev), and Postgres (apply). Olist optional for data.
 # Actions: plan | apply | destroy. On apply, deploys the function code from functions/postgres_to_raw.
 
 name: Provision Postgres Ingest Function
@@ -38,6 +38,7 @@ env:
   TF_VAR_tfstate_storage_account_name: retailflowdevtfstate
   TF_VAR_tfstate_container_name: tfstate
   TF_VAR_tfstate_base_key: retailflow-dev-base.tfstate
+  TF_VAR_tfstate_adls_key: retailflow-dev-adls.tfstate
   TF_VAR_tfstate_postgres_key: retailflow-ingest-pg.tfstate
 
 jobs:

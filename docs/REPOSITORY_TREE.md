@@ -6,12 +6,13 @@ RetailFlow/
 │   └── workflows/
 │       ├── provision-tfstate-dev.yml
 │       ├── provision-tfstate-prod.yml
-│       ├── terraform-base-dev.yml
-│       ├── terraform-adls-dev.yml      # Optional: dedicated ADLS layer (separate state/lifecycle)
-│       ├── terraform-bastion-dev.yml   # Optional Bastion (Standard; after base; destroy when idle)
+│       ├── terraform-platform-dev.yml   # RG, VNet, subnets, Postgres DNS
+│       ├── terraform-data-lake-dev.yml  # ADLS retailflowdevdls (separate state)
+│       ├── terraform-bootstrap-vm-dev.yml  # On-demand toolbox VM (separate state)
+│       ├── terraform-bastion-dev.yml   # Optional Bastion (after platform + bootstrap VM)
 │       ├── terraform-databricks-dev.yml
 │       ├── provision_olist_postgres.yml   # Optional: Olist PostgreSQL (plan/apply/destroy/full/register_only/bootstrap_only)
-│       ├── provision_postgres_ingest_function.yml   # Azure Function Postgres → RAW (plan/apply/destroy; run after base + postgres)
+│       ├── provision_postgres_ingest_function.yml   # Azure Function Postgres → RAW (after platform + data lake + postgres)
 │       ├── run_postgres_raw_initial_load.yml   # Manual one-time trigger of Postgres→RAW Function (initial mode)
 │       ├── run_postgres_raw_incremental.yml    # Scheduled/manual trigger of Postgres→RAW Function (incremental mode, every 15 min)
 │       ├── deploy-notebooks.yml
@@ -84,22 +85,27 @@ RetailFlow/
 │   │   ├── outputs.tf
 │   │   ├── README.md
 │   │   └── terraform.tfvars.example
-│   ├── base/                     # Layer 1: RG, VNet, ADLS Gen2, NSGs, Postgres subnet, bootstrap VM
+│   ├── base/                     # Layer 1 (platform): RG, VNet, subnets, NSGs, Postgres DNS
 │   │   ├── main.tf
 │   │   ├── variables.tf
 │   │   ├── outputs.tf
 │   │   └── README.md
-│   ├── postgres/                 # Optional: Olist PostgreSQL Flexible Server (private, base VNet)
-│   ├── adls/                     # Optional: dedicated ADLS Gen2 layer (retailflowdevdls)
+│   ├── bootstrap_vm/            # On-demand toolbox VM (separate state)
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   ├── outputs.tf
+│   │   └── README.md
+│   ├── postgres/                 # Optional: Olist PostgreSQL Flexible Server (private, platform VNet)
+│   ├── adls/                     # ADLS Gen2 retailflowdevdls (separate state)
 │   │   ├── main.tf
 │   │   ├── variables.tf
 │   │   └── outputs.tf
-│   ├── postgres_ingest_function/ # Optional: Azure Function Postgres → ADLS RAW (run after base + postgres)
+│   ├── postgres_ingest_function/ # Azure Function Postgres → ADLS RAW (after platform + adls + postgres)
 │   │   ├── main.tf
 │   │   ├── variables.tf
 │   │   ├── outputs.tf
 │   │   └── README.md
-│   ├── bastion/                  # Optional: Azure Bastion layer (after base; destroy when idle)
+│   ├── bastion/                  # Optional: Azure Bastion (after platform + bootstrap VM)
 │   │   ├── main.tf
 │   │   ├── variables.tf
 │   │   ├── outputs.tf

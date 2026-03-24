@@ -1,12 +1,13 @@
-# Azure Bastion (Standard) — optional. Run after Terraform Platform (Dev), Terraform Bootstrap VM (Dev), and Terraform Data Lake (Dev) as needed. Destroy when idle to save cost.
-# Use for browser SSH to private bootstrap VM (Olist runner). Ongoing Postgres → ADLS: Azure Function.
+# On-demand bootstrap VM (toolbox, Olist load). Apply when needed; destroy to save cost.
+# Requires: Terraform Platform (Dev) applied.
 
-name: Terraform Bastion (Dev)
+name: Terraform Bootstrap VM (Dev)
+
 on:
   workflow_dispatch:
     inputs:
       action:
-        description: 'Terraform action'
+        description: "Terraform action"
         required: true
         type: choice
         options:
@@ -14,21 +15,17 @@ on:
           - apply
           - destroy
         default: plan
-      aad_admin_object_id:
-        description: 'Optional Microsoft Entra Object ID to grant Virtual Machine Administrator Login on bootstrap VM'
-        required: false
-        default: ''
 
 permissions:
   id-token: write
   contents: read
 
 concurrency:
-  group: terraform-bastion-dev-${{ github.ref }}
+  group: terraform-bootstrap-vm-dev-${{ github.ref }}
   cancel-in-progress: false
 
 env:
-  TF_VERSION: '1.5.0'
+  TF_VERSION: "1.5.0"
   ARM_USE_OIDC: true
   ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
   ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -36,13 +33,12 @@ env:
   TF_BACKEND_RESOURCE_GROUP: retailflow-dev-tfstate-rg
   TF_BACKEND_STORAGE_ACCOUNT: retailflowdevtfstate
   TF_BACKEND_CONTAINER: tfstate
-  TF_BACKEND_KEY: retailflow-dev-bastion.tfstate
+  TF_BACKEND_KEY: retailflow-dev-bootstrap-vm.tfstate
+
   TF_VAR_tfstate_resource_group_name: retailflow-dev-tfstate-rg
   TF_VAR_tfstate_storage_account_name: retailflowdevtfstate
   TF_VAR_tfstate_container_name: tfstate
   TF_VAR_tfstate_base_key: retailflow-dev-base.tfstate
-  TF_VAR_tfstate_bootstrap_vm_key: retailflow-dev-bootstrap-vm.tfstate
-  TF_VAR_aad_admin_object_ids: ${{ github.event.inputs.aad_admin_object_id != '' && format('["{0}"]', github.event.inputs.aad_admin_object_id) || (vars.AAD_ADMIN_OBJECT_ID != '' && format('["{0}"]', vars.AAD_ADMIN_OBJECT_ID) || '[]') }}
 
 jobs:
   terraform:
@@ -50,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: terraform/bastion
+        working-directory: terraform/bootstrap_vm
     steps:
       - name: Checkout
         uses: actions/checkout@v4

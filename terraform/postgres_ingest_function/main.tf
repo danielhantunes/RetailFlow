@@ -1,6 +1,5 @@
 # Azure Function App for Postgres → ADLS RAW ingestion (scheduled).
-# Run after Terraform Base (Dev) and Postgres. State: retailflow-postgres-ingest-function.tfstate.
-# The function runs in the base VNet to reach Postgres and ADLS.
+# Run after Terraform Platform (Dev), Terraform Data Lake (ADLS), and Postgres. State: retailflow-postgres-ingest-function.tfstate.
 
 terraform {
   required_version = ">= 1.5.0"
@@ -19,7 +18,6 @@ provider "azurerm" {
   features {}
 }
 
-# Base layer: VNet, RG, ADLS (for role assignment and subnet)
 data "terraform_remote_state" "base" {
   backend = "azurerm"
   config = {
@@ -27,6 +25,16 @@ data "terraform_remote_state" "base" {
     storage_account_name = var.tfstate_storage_account_name
     container_name       = var.tfstate_container_name
     key                  = var.tfstate_base_key
+  }
+}
+
+data "terraform_remote_state" "adls" {
+  backend = "azurerm"
+  config = {
+    resource_group_name  = var.tfstate_resource_group_name
+    storage_account_name = var.tfstate_storage_account_name
+    container_name       = var.tfstate_container_name
+    key                  = var.tfstate_adls_key
   }
 }
 
@@ -46,7 +54,7 @@ locals {
   location    = data.terraform_remote_state.base.outputs.location
   base_rg     = data.terraform_remote_state.base.outputs.resource_group_name
   vnet_name   = data.terraform_remote_state.base.outputs.vnet_name
-  adls_id     = data.terraform_remote_state.base.outputs.storage_account_id
+  adls_id     = data.terraform_remote_state.adls.outputs.storage_account_id
 }
 
 # Subnet for Function App (VNet integration). Delegation required for Microsoft.Web/serverFarms.
@@ -107,7 +115,7 @@ resource "azurerm_linux_function_app" "main" {
     "POSTGRES_USER"        = data.terraform_remote_state.postgres.outputs.postgres_user
     "POSTGRES_PASSWORD"    = var.postgres_password != "" ? var.postgres_password : data.terraform_remote_state.postgres.outputs.postgres_password
     "POSTGRES_DB"          = data.terraform_remote_state.postgres.outputs.postgres_db
-    "RAW_STORAGE_ACCOUNT"  = data.terraform_remote_state.base.outputs.storage_account_name
+    "RAW_STORAGE_ACCOUNT"  = data.terraform_remote_state.adls.outputs.storage_account_name
     "RAW_CONTAINER"        = var.raw_container_name
     "POSTGRES_TIMER_SCHEDULE" = "0 */15 * * * *"
     "AzureWebJobsStorage" = azurerm_storage_account.function.primary_connection_string

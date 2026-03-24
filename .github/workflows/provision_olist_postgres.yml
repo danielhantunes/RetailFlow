@@ -1,7 +1,7 @@
 # Single workflow for Olist PostgreSQL: Terraform (plan/apply/destroy), register runner, and load data.
 # action: plan | apply | destroy | full (apply + register + load) | register_only | bootstrap_only.
 # full and bootstrap_only = no POSTGRES_* secrets (connection from Terraform state/outputs). Optional: set POSTGRES_* if state unavailable.
-# Sequence: plan -> apply -> register_only -> bootstrap_only -> destroy. Run Terraform Base (Dev) apply first. GH_PAT for full and register_only.
+# Sequence: plan -> apply -> register_only -> bootstrap_only -> destroy. Run Terraform Platform (Dev) first; apply Terraform Bootstrap VM (Dev) before register/bootstrap when using the VM. GH_PAT for full and register_only.
 
 name: Provision PostgreSQL for Olist
 on:
@@ -47,7 +47,7 @@ env:
   TF_BACKEND_STORAGE_ACCOUNT: retailflowdevtfstate
   TF_BACKEND_CONTAINER: tfstate
   TF_BACKEND_KEY: retailflow-ingest-pg.tfstate
-  # Read base state (delegated subnet + private DNS). Run Terraform Base (Dev) apply first.
+  # Read platform state (delegated subnet + private DNS). Terraform Platform (Dev) apply first.
   TF_VAR_tfstate_resource_group_name: retailflow-dev-tfstate-rg
   TF_VAR_tfstate_storage_account_name: retailflowdevtfstate
   TF_VAR_tfstate_container_name: tfstate

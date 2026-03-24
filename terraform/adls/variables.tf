@@ -53,9 +53,16 @@ variable "data_lake_containers" {
 }
 
 variable "private_endpoint_subnet_name" {
-  description = "Private endpoint subnet name in the base VNet"
+  description = "Private endpoint subnet name in the base VNet (ignored if private_endpoint_subnet_id is set)"
   type        = string
   default     = "retailflow-dev-pe"
+}
+
+variable "private_endpoint_subnet_id" {
+  description = "Optional full subnet resource ID for the storage private endpoint. When set, skips subnet data lookup (useful when name/RG differs or to avoid plan-time lookup)."
+  type        = string
+  default     = null
+  nullable    = true
 }
 
 variable "create_private_endpoint" {

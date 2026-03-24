@@ -1,13 +1,14 @@
-# Layer 1 – Base Infrastructure ONLY (dev)
-# This workflow manages ONLY base infrastructure: Resource Group, VNet, Subnets, ADLS Gen2 (retailflowdevdls), Private Endpoint.
-# No compute or Databricks here. Databricks is in terraform-databricks-dev.yml.
+# Layer 1 – Platform (dev): Azure networking only (RG, VNet, subnets, NSGs, Postgres private DNS).
+# Does NOT create Databricks workspace, clusters, or jobs — those are terraform/databricks via Terraform Databricks (Dev).
+# No ADLS (terraform/adls), no bootstrap VM (terraform/bootstrap_vm). VNet subnets here are delegated for later Databricks VNet injection only.
 
-name: Terraform Base (Dev)
+name: Terraform Platform (Dev)
+
 on:
   workflow_dispatch:
     inputs:
       action:
-        description: 'Terraform action'
+        description: "Terraform action"
         required: true
         type: choice
         options:
@@ -21,17 +22,15 @@ permissions:
   contents: read
 
 concurrency:
-  group: terraform-base-dev-${{ github.ref }}
+  group: terraform-platform-dev-${{ github.ref }}
   cancel-in-progress: false
 
 env:
-  TF_VERSION: '1.5.0'
-  # AzureRM provider (OIDC)
+  TF_VERSION: "1.5.0"
   ARM_USE_OIDC: true
   ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
   ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
   ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-  # Remote state backend (dev)
   TF_BACKEND_RESOURCE_GROUP: retailflow-dev-tfstate-rg
   TF_BACKEND_STORAGE_ACCOUNT: retailflowdevtfstate
   TF_BACKEND_CONTAINER: tfstate
@@ -84,11 +83,11 @@ jobs:
       - name: Terraform Apply
         if: github.event.inputs.action == 'apply'
         run: |
-          echo "==> Applying base infrastructure"
+          echo "==> Applying platform infrastructure"
           terraform apply -auto-approve -no-color -input=false
 
       - name: Terraform Destroy
         if: github.event.inputs.action == 'destroy'
         run: |
-          echo "==> Destroying base infrastructure"
+          echo "==> Destroying platform infrastructure"
           terraform destroy -auto-approve -no-color -input=false

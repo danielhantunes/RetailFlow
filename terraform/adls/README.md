@@ -13,7 +13,16 @@ Dedicated Terraform layer for `retailflowdevdls` so storage lifecycle can be man
   - location
   - VNet name (for private endpoint subnet lookup)
 
-If the base state blob exists but has **no outputs** (base stack not applied yet, or stale state), plan uses fallbacks: `base_resource_group_name`, `base_location`, and `base_vnet_name` (defaults match the dev base layer). After a successful **Terraform Base (Dev) apply**, remote outputs take precedence. If you use a non-default region or name prefix in base, set the same values via `TF_VAR_base_location`, etc.
+If the platform (`terraform/base`) state blob has **no outputs**, plan uses fallbacks. After a successful **Terraform Platform (Dev) apply**, remote outputs take precedence. Override with `TF_VAR_base_*` if needed.
+
+### Subnet not found (`retailflow-dev-pe`)
+
+The private endpoint needs the **private endpoints subnet** created by `terraform/base` (`retailflow-dev-pe`). If plan errors with subnet not found:
+
+1. Run **`Terraform Platform (Dev)` → apply** so the VNet and PE subnet exist; state should include `private_endpoints_subnet_id`.
+2. Or set **`create_private_endpoint = false`** (e.g. `TF_VAR_create_private_endpoint=false`) to provision the storage account and filesystems only; add the PE later.
+
+Optional: set **`private_endpoint_subnet_id`** to the full subnet resource ID if your layout uses a different name or RG.
 
 ## What it manages
 

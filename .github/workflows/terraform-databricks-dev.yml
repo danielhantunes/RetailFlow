@@ -1,6 +1,7 @@
-# Layer 2 – Databricks ONLY (dev)
+# Layer 2 – Databricks ONLY (dev). This workflow is the only place the Databricks workspace (and Databricks-related TF resources) are created.
+# Terraform Platform (Dev) only prepares Azure VNet/subnets; it does NOT create azurerm_databricks_workspace or Databricks provider resources.
 # Provisions: Azure Databricks Workspace (retailflow-dev-dbw), dev cluster (single-node), and main pipeline job.
-# Depends on base; run terraform-base-dev.yml first.
+# Depends on platform; run terraform-platform-dev.yml first.
 # Databricks auth: same Azure AD SP via OIDC; Databricks provider uses azure-cli auth (credential from azure/login). No ARM_CLIENT_SECRET. See docs/DATABRICKS_AZURE_AUTH.md.
 
 name: Terraform Databricks (Dev)

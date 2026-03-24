@@ -15,9 +15,15 @@ variable "tfstate_container_name" {
 }
 
 variable "tfstate_base_key" {
-  description = "State file key for base layer (e.g. retailflow-dev-base.tfstate)"
+  description = "State file key for platform/base layer (e.g. retailflow-dev-base.tfstate)"
   type        = string
   default     = "retailflow-dev-base.tfstate"
+}
+
+variable "tfstate_adls_key" {
+  description = "State file key for ADLS layer (e.g. retailflow-dev-adls.tfstate)"
+  type        = string
+  default     = "retailflow-dev-adls.tfstate"
 }
 
 variable "tfstate_postgres_key" {

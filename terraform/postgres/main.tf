@@ -22,7 +22,7 @@ provider "azurerm" {
   features {}
 }
 
-# Read base layer state for delegated subnet + private DNS (required). Run Terraform Base (Dev) apply first.
+# Read platform (base) state for delegated subnet + private DNS. Run Terraform Platform (Dev) apply first.
 data "terraform_remote_state" "base" {
   backend = "azurerm"
   config = {

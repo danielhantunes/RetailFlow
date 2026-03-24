@@ -1,4 +1,6 @@
-name: Terraform ADLS (Dev)
+# ADLS Gen2 (retailflowdevdls) — separate state/lifecycle from platform. Run after Terraform Platform (Dev).
+
+name: Terraform Data Lake (Dev)
 
 on:
   workflow_dispatch:
@@ -18,7 +20,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: terraform-adls-dev-${{ github.ref }}
+  group: terraform-data-lake-dev-${{ github.ref }}
   cancel-in-progress: false
 
 env:

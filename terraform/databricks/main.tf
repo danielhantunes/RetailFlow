@@ -32,7 +32,7 @@ provider "databricks" {
   auth_type                   = "azure-cli"
 }
 
-# Read Layer 1 (base) outputs (run Terraform Base (Dev) apply first so NSG association outputs exist)
+# Read Layer 1 (platform / base) outputs (run Terraform Platform (Dev) apply first so NSG association outputs exist)
 data "terraform_remote_state" "base" {
   backend = "azurerm"
   config = {
