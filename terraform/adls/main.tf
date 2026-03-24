@@ -24,10 +24,13 @@ data "terraform_remote_state" "base" {
 }
 
 locals {
-  rg_name    = data.terraform_remote_state.base.outputs.resource_group_name
-  location   = data.terraform_remote_state.base.outputs.location
-  vnet_name  = data.terraform_remote_state.base.outputs.vnet_name
-  pe_name    = "retailflow-dev-dls-blob-pe"
+  # Base state sometimes has no outputs (never applied, or empty state blob). try() avoids plan failure;
+  # fallbacks match terraform/base defaults (name_prefix retailflow-dev, region eastus2).
+  _out      = data.terraform_remote_state.base.outputs
+  rg_name   = coalesce(try(local._out.resource_group_name, null), var.base_resource_group_name)
+  location  = coalesce(try(local._out.location, null), var.base_location)
+  vnet_name = coalesce(try(local._out.vnet_name, null), var.base_vnet_name)
+  pe_name   = "retailflow-dev-dls-blob-pe"
 }
 
 data "azurerm_subnet" "private_endpoints" {

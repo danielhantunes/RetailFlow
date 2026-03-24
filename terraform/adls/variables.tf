@@ -20,6 +20,26 @@ variable "tfstate_base_key" {
   default     = "retailflow-dev-base.tfstate"
 }
 
+# Used when base remote state exists but has no outputs (e.g. state not applied yet).
+# Must match terraform/base naming (name_prefix = retailflow-dev) and azure_region.
+variable "base_resource_group_name" {
+  description = "Fallback resource group name if remote state outputs are empty"
+  type        = string
+  default     = "retailflow-dev-rg"
+}
+
+variable "base_vnet_name" {
+  description = "Fallback VNet name if remote state outputs are empty"
+  type        = string
+  default     = "retailflow-dev-vnet"
+}
+
+variable "base_location" {
+  description = "Fallback Azure region if remote state outputs are empty (normalize to same region as base stack)"
+  type        = string
+  default     = "eastus2"
+}
+
 variable "storage_account_name" {
   description = "ADLS Gen2 storage account name"
   type        = string
