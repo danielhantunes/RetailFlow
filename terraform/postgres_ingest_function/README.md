@@ -38,3 +38,20 @@ Same state backend as other layers; key: `retailflow-postgres-ingest-function.tf
 Runtime: `run_postgres_raw_initial_load.yml`, `run_postgres_raw_incremental.yml` (manual triggers).
 
 Run manifests under `postgres_ingest/_runs/.../run_<id>.json`.
+
+## Troubleshooting
+
+### Elastic Premium quota (EP1) — `401 Unauthorized` / “additional quota” / `ElasticPremium VMs: 0`
+
+This module uses **Elastic Premium EP1** (`azurerm_service_plan` with `sku_name = "EP1"`) so the Linux Function App can use **VNet integration** to reach private PostgreSQL.
+
+Azure sometimes returns **HTTP 401** with a body mentioning **quota** and **`Current Limit (ElasticPremium VMs): 0`**. That is a **subscription quota** issue in the **Function App region** (default **East US 2**), not an OIDC or Terraform auth problem.
+
+**What to do**
+
+1. **Request a quota increase** (preferred): Azure Portal → **Help + support** → **Create a support request** → issue type **Service and subscription limits (quotas)**. In the description, state you need capacity for an **Elastic Premium App Service plan (EP1)** for **Azure Functions** in **East US 2**, and paste the error (including *Elastic Premium VMs* / limit 0). See [Microsoft Learn — regional quota requests](https://learn.microsoft.com/azure/azure-portal/supportability/regional-quota-requests).
+2. **If you cannot find a quota row** in **Subscriptions → Usage + quotas**: the Elastic Premium limit is often **not labeled clearly** in the portal UI. Opening a **quota support ticket** with the error text is normal; support routes it to the right limit.
+3. **CLI (optional):** `az appservice list-usage --location eastus2 -o table` may show related usage names for your subscription.
+4. **After quota is approved:** Re-run **`provision_postgres_ingest_function`** **apply**. A failed apply may have created the subnet, Application Insights, and internal storage account already; Terraform should complete the plan and App Service plan on retry.
+
+**Note:** Some subscription **offers** (e.g. certain trial/sponsored SKUs) may not allow Elastic Premium until you move workloads to **pay-as-you-go** or get allowance from support.
