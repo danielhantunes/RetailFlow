@@ -6,7 +6,7 @@ The **bootstrap VM** (`retailflow-dev-bootstrap-vm`) in the base VNet is used fo
 
 Use **Azure Bastion** and sign in with **Microsoft Entra ID** in the Portal connect flow — no SSH keys or local Key Vault steps for VM access. Deploy **Terraform Bastion (Dev)** when needed, then destroy to save cost; see [BASTION.md](BASTION.md). Ensure your user has **Virtual Machine Administrator Login** or **Virtual Machine User Login** on the VM (Terraform workflow input, repo variable, or manual IAM).
 
-**Alternatives:** Azure **Run Command**, or Bastion with **SSH key** / password only if you configured the VM that way in base Terraform.
+**Alternatives:** Azure **Run Command**, or Bastion with **SSH key** / password only if you configured the VM that way in `terraform/bootstrap_vm`.
 
 ## 2. Setup on the VM
 

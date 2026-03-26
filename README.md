@@ -199,19 +199,19 @@ All workflows are **manual** (`workflow_dispatch`) unless noted.
 
 6. **After infra is up (any order):** deploy notebooks (`deploy-notebooks.yml`), deploy jobs (`deploy-jobs.yml`), configure secret scope, bootstrap RAW, run Airflow DAGs, dbt marts, sync Gold to Snowflake (when configured), monitoring.
 
-**Azure Bastion (optional, on-demand):** **Terraform Bastion (Dev)** — `terraform-bastion-dev.yml`. Run **after** Platform, **Bootstrap VM** (if using SSH), and Data Lake as needed. **Destroy** when done.
+- **Azure Bastion (optional, on-demand):** **Terraform Bastion (Dev)** — `terraform-bastion-dev.yml`. Run **after** Platform, **Bootstrap VM** (if using SSH), and Data Lake as needed. **Destroy** when done.
 
-**Olist PostgreSQL (optional):** **Provision PostgreSQL for Olist** (`provision_olist_postgres.yml`). **After Terraform Platform (Dev)** — Postgres reads platform state. **Apply Terraform Bootstrap VM (Dev)** before **register_only** / **bootstrap_only** if you use the runner on that VM. **If Databricks ingests from Postgres:** Platform → Postgres (load data) → Databricks. **`GH_PAT`** for runner registration. **action:** `plan` \| `apply` \| `destroy` \| **`full`** \| **`register_only`** \| **`bootstrap_only`**. See [docs/TOOLBOX.md](docs/TOOLBOX.md).
+- **Olist PostgreSQL (optional):** **Provision PostgreSQL for Olist** (`provision_olist_postgres.yml`). **After Terraform Platform (Dev)** — Postgres reads platform state. **Apply Terraform Bootstrap VM (Dev)** before **register_only** / **bootstrap_only** if you use the runner on that VM. **If Databricks ingests from Postgres:** Platform → Postgres (load data) → Databricks. **`GH_PAT`** for runner registration. **action:** `plan` \| `apply` \| `destroy` \| **`full`** \| **`register_only`** \| **`bootstrap_only`**. See [docs/TOOLBOX.md](docs/TOOLBOX.md).
 
-**Postgres Ingest Function (optional):** **Provision Postgres Ingest Function** (`provision_postgres_ingest_function.yml`). Run **after** Platform, **Data Lake**, and Postgres (apply). On **apply**, Terraform + deploy function code from `functions/postgres_to_raw`.
+- **Postgres Ingest Function (optional):** **Provision Postgres Ingest Function** (`provision_postgres_ingest_function.yml`). Run **after** Platform, **Data Lake**, and Postgres (apply). On **apply**, Terraform + deploy function code from `functions/postgres_to_raw`.
 After provisioning, ingestion cadence is controlled by the Azure Function timer (`POSTGRES_TIMER_SCHEDULE`, default every 15 minutes). Use workflow triggers for ad-hoc runs: **Run Postgres RAW Initial Load** (`run_postgres_raw_initial_load.yml`) for one-time bootstrap/history and **Run Postgres RAW Incremental** (`run_postgres_raw_incremental.yml`) for manual incremental runs.
 The function writes chunked JSONL and persists per-table checkpoints in ADLS (`_control/postgres_watermarks`) plus run manifests in `postgres_ingest/_runs`, enabling restart-safe continuation after interrupted runs.
 
-**Optional:** **Provision Terraform State Backend (Prod)** (`provision-tfstate-prod.yml`) for prod state.
+- **Optional:** **Provision Terraform State Backend (Prod)** (`provision-tfstate-prod.yml`) for prod state.
 
-**Tests:** Run `tests.yml` anytime.
+- **Tests:** Run `tests.yml` anytime.
 
-**Destroy (full teardown):** **Terraform Databricks (Dev)** `destroy` → **Terraform Bastion (Dev)** `destroy` (if used) → **Provision Postgres Ingest Function** `destroy` → **Provision PostgreSQL for Olist** `destroy` (if used) → **Terraform Bootstrap VM (Dev)** `destroy` → **Terraform Data Lake (Dev)** `destroy` → **Terraform Platform (Dev)** `destroy`. Order matters for dependencies.
+- **Destroy (full teardown):** **Terraform Databricks (Dev)** `destroy` → **Terraform Bastion (Dev)** `destroy` (if used) → **Provision Postgres Ingest Function** `destroy` → **Provision PostgreSQL for Olist** `destroy` (if used) → **Terraform Bootstrap VM (Dev)** `destroy` → **Terraform Data Lake (Dev)** `destroy` → **Terraform Platform (Dev)** `destroy`. Order matters for dependencies.
 
 ---
 
@@ -235,7 +235,7 @@ The function writes chunked JSONL and persists per-table checkpoints in ADLS (`_
 
 Workflows live in [.github/workflows/](.github/workflows/).
 
-**Secrets:** Terraform Azure (OIDC): `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (passed as `ARM_*`). Terraform Databricks (Dev): same OIDC app + **`AZURE_PRINCIPAL_ID`** (service principal Object ID for workspace Contributor assignment); **no** `ARM_CLIENT_SECRET` for this workflow. See [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md). Optional (deploy-notebooks/jobs): `DATABRICKS_HOST`, `DATABRICKS_TOKEN`. Promote: `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`. **Olist:** **`GH_PAT`** for `full` and `register_only`. **`POSTGRES_*`** optional for `bootstrap_only` (used only if Terraform state has no outputs).
+- **Secrets:** Terraform Azure (OIDC): `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (passed as `ARM_*`). Terraform Databricks (Dev): same OIDC app + **`AZURE_PRINCIPAL_ID`** (service principal Object ID for workspace Contributor assignment); **no** `ARM_CLIENT_SECRET` for this workflow. See [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md). Optional (deploy-notebooks/jobs): `DATABRICKS_HOST`, `DATABRICKS_TOKEN`. Promote: `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`. **Olist:** **`GH_PAT`** for `full` and `register_only`. **`POSTGRES_*`** optional for `bootstrap_only` (used only if Terraform state has no outputs).
 
 ---
 

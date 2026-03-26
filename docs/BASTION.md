@@ -41,11 +41,11 @@ Bastion **does not create** VM users or passwords. You connect using the VM’s 
 ### Case B: VM uses password authentication
 
 - **Username:** `bootstrap_vm_admin_username` (default: `azureuser`)
-- **Password:** `bootstrap_vm_admin_password` output from `terraform/base` (unless your VM was configured as key-only)
+- **Password:** `bootstrap_vm_admin_password` output from `terraform/bootstrap_vm` (unless your VM was configured as key-only)
 
 ### Case C: VM uses SSH key authentication (key-only)
 
-- Set `bootstrap_vm_ssh_public_key` during Terraform Base provisioning.
+- Set `bootstrap_vm_ssh_public_key` during Terraform Bootstrap VM provisioning.
 - In that case, the VM **password login is disabled**.
 - Choose the **SSH key** option in the Bastion connect UI and upload/paste the **matching SSH private key**.
 

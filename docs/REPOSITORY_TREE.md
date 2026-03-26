@@ -14,7 +14,7 @@ RetailFlow/
 │       ├── provision_olist_postgres.yml   # Optional: Olist PostgreSQL (plan/apply/destroy/full/register_only/bootstrap_only)
 │       ├── provision_postgres_ingest_function.yml   # Azure Function Postgres → RAW (after platform + data lake + postgres)
 │       ├── run_postgres_raw_initial_load.yml   # Manual one-time trigger of Postgres→RAW Function (initial mode)
-│       ├── run_postgres_raw_incremental.yml    # Scheduled/manual trigger of Postgres→RAW Function (incremental mode, every 15 min)
+│       ├── run_postgres_raw_incremental.yml    # Manual trigger of Postgres→RAW Function (incremental mode)
 │       ├── deploy-notebooks.yml
 │       ├── deploy-jobs.yml
 │       ├── promote-environment.yml
