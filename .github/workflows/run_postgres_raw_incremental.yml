@@ -25,6 +25,8 @@ env:
 jobs:
   run-incremental:
     runs-on: ubuntu-latest
+    env:
+      AZURE_CORE_HTTP_TIMEOUT: "600"
     defaults:
       run:
         working-directory: terraform/postgres_ingest_function
@@ -73,13 +75,27 @@ jobs:
       - name: Invoke Postgres→RAW HTTP trigger (incremental)
         run: |
           sleep 15
-          master_key=$(az functionapp keys list \
-            -g "${{ steps.tf-out.outputs.rg }}" \
-            -n "${{ steps.tf-out.outputs.name }}" \
-            --query masterKey -o tsv)
-          trigger_url="https://${{ steps.tf-out.outputs.name }}.azurewebsites.net/${{ env.HTTP_INGEST_PATH }}"
+          RG="${{ steps.tf-out.outputs.rg }}"
+          NAME="${{ steps.tf-out.outputs.name }}"
+          master_key=""
+          for attempt in 1 2 3 4 5; do
+            if master_key=$(az functionapp keys list -g "$RG" -n "$NAME" --query masterKey -o tsv); then
+              if [ -n "$master_key" ]; then
+                break
+              fi
+            fi
+            echo "az functionapp keys list failed or empty (attempt ${attempt}/5); retrying in 45s..."
+            sleep 45
+          done
+          if [ -z "$master_key" ]; then
+            echo "Could not read host master key after 5 attempts."
+            exit 1
+          fi
+          trigger_url="https://${NAME}.azurewebsites.net/${{ env.HTTP_INGEST_PATH }}"
           echo "Invoking: ${trigger_url}"
           curl --fail --show-error --silent \
+            --connect-timeout 120 \
+            --max-time 7200 \
             -X POST "${trigger_url}" \
             -H "Content-Type: application/json" \
             -H "x-functions-key: ${master_key}" \
