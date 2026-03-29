@@ -135,9 +135,30 @@ jobs:
           pip install -r requirements.txt --target .python_packages/lib/site-packages
           zip -r ../../postgres_to_raw.zip . -x "*.pyc" -x "__pycache__/*" -x ".git*" -x "*.zip"
 
+      # config-zip calls SCM with a hardcoded 30s read timeout and often fails with ReadTimeout on cold/slow Kudu.
+      # webapp deploy (OneDeploy) accepts --timeout (ms) and is more reliable for zip packages.
       - name: Deploy function code to Azure
         run: |
-          az functionapp deployment source config-zip \
-            -g ${{ steps.tf-out.outputs.rg }} \
-            -n ${{ steps.tf-out.outputs.name }} \
-            --src postgres_to_raw.zip
+          set -e
+          RG="${{ steps.tf-out.outputs.rg }}"
+          NAME="${{ steps.tf-out.outputs.name }}"
+          for attempt in 1 2 3; do
+            echo "Zip deploy attempt ${attempt}/3..."
+            if az webapp deploy \
+              --resource-group "$RG" \
+              --name "$NAME" \
+              --src-path postgres_to_raw.zip \
+              --type zip \
+              --timeout 600000 \
+              --enable-kudu-warmup true \
+              --restart true; then
+              echo "Deploy succeeded."
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Waiting 90s before retry..."
+              sleep 90
+            fi
+          done
+          echo "Deploy failed after 3 attempts."
+          exit 1
