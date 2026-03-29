@@ -73,9 +73,16 @@ jobs:
             -n "${{ steps.tf-out.outputs.name }}" \
             --settings INGESTION_MODE=initial RAW_FORMAT=jsonl > /dev/null
 
+      - name: Restart Function App (apply settings before invoke)
+        run: |
+          az functionapp restart \
+            -g "${{ steps.tf-out.outputs.rg }}" \
+            -n "${{ steps.tf-out.outputs.name }}"
+
       - name: Trigger timer function once (initial load)
         if: github.event.inputs.dry_run == 'false'
         run: |
+          sleep 15
           master_key=$(az functionapp keys list \
             -g "${{ steps.tf-out.outputs.rg }}" \
             -n "${{ steps.tf-out.outputs.name }}" \

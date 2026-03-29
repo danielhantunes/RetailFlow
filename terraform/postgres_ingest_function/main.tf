@@ -120,6 +120,8 @@ resource "azurerm_linux_function_app" "main" {
     "POSTGRES_TIMER_SCHEDULE" = "0 */15 * * * *"
     "AzureWebJobsStorage" = azurerm_storage_account.function.primary_connection_string
     "FUNCTIONS_WORKER_RUNTIME" = "python"
+    # Python v2 programming model (function_app.py decorators): required for functions to register in the host.
+    "AzureWebJobsFeatureFlags" = "EnableWorkerIndexing"
   }
 
   identity {
