@@ -143,8 +143,7 @@ def _release_lock(conn) -> None:
         cur.execute("SELECT pg_advisory_unlock(%s);", (780011,))
 
 
-@app.timer_trigger(schedule="%POSTGRES_TIMER_SCHEDULE%", arg_name="timer", run_on_startup=False)
-def postgres_to_raw_timer(timer: func.TimerRequest) -> None:
+def _execute_postgres_to_raw() -> None:
     run_ts = _utc_now()
     run_ts_iso = _iso(run_ts)
     run_id = run_ts.strftime("%Y%m%dT%H%M%SZ")
@@ -342,3 +341,27 @@ def postgres_to_raw_timer(timer: func.TimerRequest) -> None:
         conn.close()
 
     logging.info("Postgres->RAW run finished: tables=%s", processed_tables)
+
+
+@app.timer_trigger(
+    arg_name="timer",
+    schedule="%POSTGRES_TIMER_SCHEDULE%",
+    run_on_startup=False,
+)
+def postgres_to_raw_timer(timer: func.TimerRequest) -> None:
+    _execute_postgres_to_raw()
+
+
+# On-demand runs from CI (admin/timer invoke URLs are unreliable for Python v2). POST with function or host key.
+@app.route(
+    route="postgres-to-raw/run",
+    methods=["POST"],
+    auth_level=func.AuthLevel.FUNCTION,
+)
+def postgres_to_raw_http(_req: func.HttpRequest) -> func.HttpResponse:
+    _execute_postgres_to_raw()
+    return func.HttpResponse(
+        '{"status":"completed"}',
+        status_code=200,
+        mimetype="application/json",
+    )

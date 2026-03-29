@@ -20,7 +20,7 @@ env:
   TF_BACKEND_STORAGE_ACCOUNT: retailflowdevtfstate
   TF_BACKEND_CONTAINER: tfstate
   TF_BACKEND_KEY: retailflow-postgres-ingest-function.tfstate
-  FUNCTION_NAME: postgres_to_raw_timer
+  HTTP_INGEST_PATH: api/postgres-to-raw/run
 
 jobs:
   run-incremental:
@@ -70,14 +70,14 @@ jobs:
             -g "${{ steps.tf-out.outputs.rg }}" \
             -n "${{ steps.tf-out.outputs.name }}"
 
-      - name: Trigger timer function once (incremental)
+      - name: Invoke Postgres→RAW HTTP trigger (incremental)
         run: |
           sleep 15
           master_key=$(az functionapp keys list \
             -g "${{ steps.tf-out.outputs.rg }}" \
             -n "${{ steps.tf-out.outputs.name }}" \
             --query masterKey -o tsv)
-          trigger_url="https://${{ steps.tf-out.outputs.name }}.azurewebsites.net/admin/functions/${{ env.FUNCTION_NAME }}"
+          trigger_url="https://${{ steps.tf-out.outputs.name }}.azurewebsites.net/${{ env.HTTP_INGEST_PATH }}"
           echo "Invoking: ${trigger_url}"
           curl --fail --show-error --silent \
             -X POST "${trigger_url}" \
