@@ -5,6 +5,8 @@ environment: dev
 databricks:
   workspace_url: https://adb-xxxx.azuredatabricks.net
   workspace_id: "123456789"
+# Storage: sample names for notebooks/jobs. Data Lake Terraform uses its own account (default dev: retailflowdevdls).
+# Postgres → RAW writes to RAW on that ADLS account; align base_path with terraform/adls outputs.
 storage:
   account_name: retailflowdevsa
   container_raw: raw

@@ -74,7 +74,7 @@ RetailFlow/
 │               ├── daily_revenue.sql
 │               └── sources.yml
 ├── functions/
-│   └── postgres_to_raw/          # Azure Function (timer): Postgres → ADLS RAW (function_app.py, host.json, requirements.txt)
+│   └── postgres_to_raw/          # Azure Function (timer + HTTP): Postgres → ADLS RAW (function_app.py, host.json, requirements.txt)
 ├── databaseinput/                # Brazilian E-Commerce (Olist) dataset ZIP
 ├── sql/
 │   └── create_tables.sql         # Olist table DDL

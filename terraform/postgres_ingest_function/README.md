@@ -1,6 +1,6 @@
 # Postgres Ingest Azure Function
 
-Azure Function App (timer-triggered) that reads from Azure PostgreSQL and writes to ADLS Gen2 RAW. Run **after** Terraform Platform (Dev), **Terraform Data Lake (Dev)** (ADLS), and Postgres (apply).
+Azure Function App (**Python v2** programming model: **timer** + **`POST /api/postgres-to-raw/run`**) that reads from Azure PostgreSQL and writes to ADLS Gen2 RAW. Run **after** Terraform Platform (Dev), **Terraform Data Lake (Dev)** (ADLS), and Postgres (apply).
 
 ## Prerequisites
 
@@ -15,8 +15,9 @@ Azure Function App (timer-triggered) that reads from Azure PostgreSQL and writes
 - **App Service Plan** (Elastic Premium EP1) for VNet integration.
 - **Linux Function App** (Python 3.11) with VNet integration, managed identity, Application Insights.
 - **Role assignment:** Function's managed identity → Storage Blob Data Contributor on the **Data Lake** storage account (from `terraform/adls` state).
-- **App settings:** Postgres connection (from Postgres state), RAW storage/container, AzureWebJobsStorage.
-- **Runtime controls:** `INGESTION_MODE` (`initial`/`incremental`), `RAW_FORMAT` (`jsonl`), optional `INGEST_TABLE_CONFIG_JSON`, `INGEST_CHUNK_SIZE`, and ADLS watermark checkpoints under `_control/postgres_watermarks/`.
+- **App settings:** Postgres connection (from Postgres state), RAW storage/container, AzureWebJobsStorage, **`AzureWebJobsFeatureFlags=EnableWorkerIndexing`** (required for Python v2 so functions register in the host), `POSTGRES_TIMER_SCHEDULE`.
+- **Runtime controls:** `INGESTION_MODE` (`initial`/`incremental`), `RAW_FORMAT` (`jsonl`), optional `INGEST_TABLE_CONFIG_JSON`, `INGEST_CHUNK_SIZE`, optional `RAW_PREFIX` (default `postgres_ingest`), and ADLS watermark checkpoints under `_control/postgres_watermarks/`.
+- **RAW layout:** `{RAW_PREFIX}/{table}/ingestion_date=.../hour=.../batch_id=.../chunk_*.jsonl` plus manifests under `{RAW_PREFIX}/_runs/...`.
 - **Restart-safe ingestion:** chunked extraction with checkpoint cursor after each chunk.
 - **Timer:** `POSTGRES_TIMER_SCHEDULE` (default every 15 minutes in Azure).
 
@@ -33,13 +34,24 @@ Same state backend as other layers; key: `retailflow-postgres-ingest-function.tf
 
 ## CI/CD
 
-**Provision Postgres Ingest Function** (`provision_postgres_ingest_function.yml`): `plan` | `apply` | `destroy`. On apply, deploys code from `functions/postgres_to_raw`.
+**Provision Postgres Ingest Function** (`provision_postgres_ingest_function.yml`): `plan` | `apply` | `destroy`. On apply, builds a zip from `functions/postgres_to_raw` and deploys with **`az webapp deploy`** (10-minute operation timeout, Kudu warmup, retries). Older **`config-zip`** often hits a **30s SCM read timeout** during `validate_app_settings_in_scm`; prefer the workflow as committed.
 
-Runtime: `run_postgres_raw_initial_load.yml`, `run_postgres_raw_incremental.yml` (manual triggers).
+**Manual runs:** `run_postgres_raw_initial_load.yml`, `run_postgres_raw_incremental.yml` set `INGESTION_MODE`, restart the app, then **POST** `https://<functionapp>.azurewebsites.net/api/postgres-to-raw/run` with the **host master key** (`az functionapp keys list`). Retries and **`AZURE_CORE_HTTP_TIMEOUT`** reduce transient ARM timeouts.
 
-Run manifests under `postgres_ingest/_runs/.../run_<id>.json`.
+**Payload:** `host.json` sets **`functionTimeout`** (e.g. 2 hours) so long **initial** loads can complete over HTTP before Azure closes the request.
+
+Run manifests: `{RAW_PREFIX}/_runs/.../run_<id>.json` (default prefix `postgres_ingest`).
 
 ## Troubleshooting
+
+### Zip deploy or SCM timeouts
+
+- **Symptom:** `Read timed out` / **HTTPSConnectionPool** to **`<app>.scm.azurewebsites.net`** during **Provision Postgres Ingest Function** deploy.
+- **Mitigation:** Workflow uses **`az webapp deploy`** with **`--timeout 600000`** and retries. Re-run the workflow; ensure SCM is reachable from **GitHub-hosted** runners (no blanket block on `*.azurewebsites.net`).
+
+### ARM `Request Timeout` on `az functionapp keys list`
+
+- **Mitigation:** **Run Postgres RAW** workflows retry key fetch and set **`AZURE_CORE_HTTP_TIMEOUT`**. Re-run if Azure RM is slow.
 
 ### Elastic Premium quota (EP1) — `401 Unauthorized` / “additional quota” / `ElasticPremium VMs: 0`
 
