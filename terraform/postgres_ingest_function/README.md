@@ -1,6 +1,6 @@
 # Postgres Ingest Azure Function
 
-Azure Function App (**Python v2** programming model: **timer** + **`POST /api/postgres-to-raw/run`**) that reads from Azure PostgreSQL and writes to ADLS Gen2 RAW. Run **after** Terraform Platform (Dev), **Terraform Data Lake (Dev)** (ADLS), and Postgres (apply).
+Azure Function App (**Python v2** programming model: **timer** + **`GET|POST /api/postgres_ingest_run`**) that reads from Azure PostgreSQL and writes to ADLS Gen2 RAW. Run **after** Terraform Platform (Dev), **Terraform Data Lake (Dev)** (ADLS), and Postgres (apply).
 
 ## Prerequisites
 
@@ -36,7 +36,7 @@ Same state backend as other layers; key: `retailflow-postgres-ingest-function.tf
 
 **Provision Postgres Ingest Function** (`provision_postgres_ingest_function.yml`): `plan` | `apply` | `destroy`. On apply, builds a zip from `functions/postgres_to_raw` and deploys with **`az webapp deploy`** (10-minute operation timeout, Kudu warmup, retries). Older **`config-zip`** often hits a **30s SCM read timeout** during `validate_app_settings_in_scm`; prefer the workflow as committed.
 
-**Manual runs:** `run_postgres_raw_initial_load.yml`, `run_postgres_raw_incremental.yml` set `INGESTION_MODE`, restart the app, then **POST** `https://<functionapp>.azurewebsites.net/api/postgres-to-raw/run` with the **host master key** (`az functionapp keys list`). Retries and **`AZURE_CORE_HTTP_TIMEOUT`** reduce transient ARM timeouts.
+**Manual runs:** `run_postgres_raw_initial_load.yml`, `run_postgres_raw_incremental.yml` set `INGESTION_MODE`, restart the app, **GET**-probe then **POST** `https://<functionapp>.azurewebsites.net/api/postgres_ingest_run` with the **host master key** (`az functionapp keys list`). Retries and **`AZURE_CORE_HTTP_TIMEOUT`** reduce transient ARM timeouts. If **GET** returns **404**, redeploy the function zip (**Provision Postgres Ingest Function** apply) and confirm **`AzureWebJobsFeatureFlags=EnableWorkerIndexing`** is set.
 
 **Payload:** `host.json` sets **`functionTimeout`** (e.g. 2 hours) so long **initial** loads can complete over HTTP before Azure closes the request.
 

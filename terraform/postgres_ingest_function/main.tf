@@ -102,6 +102,7 @@ resource "azurerm_linux_function_app" "main" {
   storage_account_name       = azurerm_storage_account.function.name
   storage_account_access_key = azurerm_storage_account.function.primary_access_key
   virtual_network_subnet_id  = azurerm_subnet.function.id
+  functions_extension_version = "~4"
 
   site_config {
     application_insights_connection_string = azurerm_application_insights.func.connection_string

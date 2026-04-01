@@ -116,7 +116,7 @@ Analytics marts  (Power BI, Tableau, reporting)
 ```
 
 - **PostgreSQL:** Operational source (e.g. Azure PostgreSQL with Olist data). Provisioned via Terraform; initial load via `provision_olist_postgres.yml`.
-- **Scheduled ingestion:** An **Azure Function** (Postgres → RAW) runs on a **timer** (e.g. every 15 min), reads from Postgres (query-based), and writes **JSONL** under **`postgres_ingest/`** in the RAW ADLS filesystem (see [docs/DATA_FLOW.md](docs/DATA_FLOW.md#postgres-azure-function-to-raw)). **Manual / CI runs** call **`POST /api/postgres-to-raw/run`** (host key) via **Run Postgres RAW Initial Load** / **Incremental** workflows after setting `INGESTION_MODE`. Provision via **Provision Postgres Ingest Function** (run after Platform, Data Lake, and Postgres).
+- **Scheduled ingestion:** An **Azure Function** (Postgres → RAW) runs on a **timer** (e.g. every 15 min), reads from Postgres (query-based), and writes **JSONL** under **`postgres_ingest/`** in the RAW ADLS filesystem (see [docs/DATA_FLOW.md](docs/DATA_FLOW.md#postgres-azure-function-to-raw)). **Manual / CI runs** call **`POST /api/postgres_ingest_run`** (host key; **`GET`** is a lightweight health check) via **Run Postgres RAW Initial Load** / **Incremental** after setting `INGESTION_MODE`. Provision via **Provision Postgres Ingest Function** (run after Platform, Data Lake, and Postgres).
 - **VM toolbox:** The bootstrap VM is used for **one-time or ad-hoc loads** (e.g. initial Olist CSV load) and **inspecting Postgres** (psql, Python scripts). It is not used for scheduled ingestion. See [docs/TOOLBOX.md](docs/TOOLBOX.md).
 - **RAW → Bronze → Silver:** Databricks notebooks/DLT; Gold is then synced or exposed to **Snowflake** for serving; **dbt** builds marts on Gold.
 
@@ -205,7 +205,7 @@ All workflows are **manual** (`workflow_dispatch`) unless noted.
 - **Olist PostgreSQL (optional):** **Provision PostgreSQL for Olist** (`provision_olist_postgres.yml`). **After Terraform Platform (Dev)** — Postgres reads platform state. **Apply Terraform Bootstrap VM (Dev)** before **register_only** / **bootstrap_only** if you use the runner on that VM. **If Databricks ingests from Postgres:** Platform → Postgres (load data) → Databricks. **`GH_PAT`** for runner registration. **action:** `plan` \| `apply` \| `destroy` \| **`full`** \| **`register_only`** \| **`bootstrap_only`**. See [docs/TOOLBOX.md](docs/TOOLBOX.md).
 
 - **Postgres Ingest Function (optional):** **Provision Postgres Ingest Function** (`provision_postgres_ingest_function.yml`). Run **after** Platform, **Data Lake**, and Postgres (apply). On **apply**, Terraform + **zip deploy** (`az webapp deploy`, longer timeout than legacy `config-zip`; see module README). Code: `functions/postgres_to_raw`.
-After provisioning, ingestion cadence is controlled by the timer (`POSTGRES_TIMER_SCHEDULE`, default every 15 minutes). **Ad-hoc runs:** **Run Postgres RAW Initial Load** / **Run Postgres RAW Incremental** set `INGESTION_MODE` and invoke **`POST .../api/postgres-to-raw/run`** with the **host master key** (not the Functions admin timer URL).
+After provisioning, ingestion cadence is controlled by the timer (`POSTGRES_TIMER_SCHEDULE`, default every 15 minutes). **Ad-hoc runs:** **Run Postgres RAW Initial Load** / **Incremental** set `INGESTION_MODE` and invoke **`POST .../api/postgres_ingest_run`** with the **host master key** (workflows **GET**-probe first to catch missing deploys).
 The function writes chunked JSONL under **`postgres_ingest/`**, checkpoints in **`_control/postgres_watermarks`**, and run manifests in **`postgres_ingest/_runs`**, enabling restart-safe continuation after interrupted runs. `host.json` sets a long **`functionTimeout`** so initial loads can finish over HTTP.
 
 - **Optional:** **Provision Terraform State Backend (Prod)** (`provision-tfstate-prod.yml`) for prod state.
@@ -231,7 +231,7 @@ The function writes chunked JSONL under **`postgres_ingest/`**, checkpoints in *
 - **tests.yml:** Pytest unit tests + Ruff lint.
 - **provision_olist_postgres.yml:** Olist Postgres + runner. **After Terraform Platform (Dev)**. Apply **Bootstrap VM** before register/bootstrap if using that VM. **action:** `plan` \| `apply` \| `destroy` \| **`full`** \| **`register_only`** \| **`bootstrap_only`**.
 - **provision_postgres_ingest_function.yml:** Postgres → ADLS RAW function. **After Platform, Data Lake, Postgres (apply).** **action:** `plan` \| `apply` \| `destroy`.
-- **run_postgres_raw_initial_load.yml:** Sets `INGESTION_MODE=initial`, restarts the app, then **POST**s `https://<app>.azurewebsites.net/api/postgres-to-raw/run` with the **host master key** (retries on ARM timeouts).
+- **run_postgres_raw_initial_load.yml:** Sets `INGESTION_MODE=initial`, restarts the app, **GET** probes then **POST**s `https://<app>.azurewebsites.net/api/postgres_ingest_run` with the **host master key**.
 - **run_postgres_raw_incremental.yml:** Same for **`INGESTION_MODE=incremental`** (ad-hoc incremental runs).
 
 Workflows live in [.github/workflows/](.github/workflows/).

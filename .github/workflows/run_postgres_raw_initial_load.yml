@@ -30,7 +30,7 @@ env:
   TF_BACKEND_CONTAINER: tfstate
   TF_BACKEND_KEY: retailflow-postgres-ingest-function.tfstate
   # HTTP trigger (same ingestion as timer); admin invoke on timer-only often 404s for Python v2.
-  HTTP_INGEST_PATH: api/postgres-to-raw/run
+  HTTP_INGEST_PATH: api/postgres_ingest_run
 
 jobs:
   run-initial-load:
@@ -104,7 +104,16 @@ jobs:
             exit 1
           fi
           trigger_url="https://${NAME}.azurewebsites.net/${{ env.HTTP_INGEST_PATH }}"
-          echo "Invoking: ${trigger_url}"
+          echo "Registered functions (expect postgres_to_raw_http / timer):"
+          az functionapp function list -g "$RG" -n "$NAME" --query "[].name" -o tsv 2>/dev/null || echo "(list unavailable — check Azure CLI / RBAC)"
+          echo "GET probe (route must exist after zip deploy; does not run ingestion): ${trigger_url}"
+          curl --fail --show-error --silent \
+            --connect-timeout 120 \
+            --max-time 120 \
+            -X GET "${trigger_url}" \
+            -H "x-functions-key: ${master_key}"
+          echo ""
+          echo "POST ingestion: ${trigger_url}"
           # Initial loads can exceed default HTTP/client timeouts; host.json sets functionTimeout (deploy zip to apply).
           curl --fail --show-error --silent \
             --connect-timeout 120 \

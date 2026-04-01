@@ -20,7 +20,7 @@ env:
   TF_BACKEND_STORAGE_ACCOUNT: retailflowdevtfstate
   TF_BACKEND_CONTAINER: tfstate
   TF_BACKEND_KEY: retailflow-postgres-ingest-function.tfstate
-  HTTP_INGEST_PATH: api/postgres-to-raw/run
+  HTTP_INGEST_PATH: api/postgres_ingest_run
 
 jobs:
   run-incremental:
@@ -92,7 +92,16 @@ jobs:
             exit 1
           fi
           trigger_url="https://${NAME}.azurewebsites.net/${{ env.HTTP_INGEST_PATH }}"
-          echo "Invoking: ${trigger_url}"
+          echo "Registered functions:"
+          az functionapp function list -g "$RG" -n "$NAME" --query "[].name" -o tsv 2>/dev/null || true
+          echo "GET probe: ${trigger_url}"
+          curl --fail --show-error --silent \
+            --connect-timeout 120 \
+            --max-time 120 \
+            -X GET "${trigger_url}" \
+            -H "x-functions-key: ${master_key}"
+          echo ""
+          echo "POST: ${trigger_url}"
           curl --fail --show-error --silent \
             --connect-timeout 120 \
             --max-time 7200 \

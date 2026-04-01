@@ -353,12 +353,19 @@ def postgres_to_raw_timer(timer: func.TimerRequest) -> None:
 
 
 # On-demand runs from CI (admin/timer invoke URLs are unreliable for Python v2). POST with function or host key.
+# Single-segment route: /api/postgres_ingest_run — multi-segment routes sometimes 404 on Linux v2 hosts.
 @app.route(
-    route="postgres-to-raw/run",
-    methods=["POST"],
+    route="postgres_ingest_run",
+    methods=["GET", "POST"],
     auth_level=func.AuthLevel.FUNCTION,
 )
-def postgres_to_raw_http(_req: func.HttpRequest) -> func.HttpResponse:
+def postgres_to_raw_http(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "GET":
+        return func.HttpResponse(
+            '{"status":"ok","trigger":"postgres_ingest_run"}',
+            status_code=200,
+            mimetype="application/json",
+        )
     _execute_postgres_to_raw()
     return func.HttpResponse(
         '{"status":"completed"}',
