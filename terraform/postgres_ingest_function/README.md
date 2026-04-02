@@ -13,7 +13,7 @@ Azure Function App (**Python v2** programming model: **timer** + **`GET|POST /ap
 - **Subnet** in the platform VNet (delegation `Microsoft.Web/serverFarms`) for Function App VNet integration.
 - **Storage account** for the Function App (Azure requirement).
 - **App Service Plan** (Elastic Premium EP1) for VNet integration.
-- **Linux Function App** (Python 3.11) with VNet integration, managed identity, Application Insights.
+- **Linux Function App** (Python 3.11, Functions runtime **`~4`**) with VNet integration, managed identity, Application Insights.
 - **Role assignment:** Function's managed identity → Storage Blob Data Contributor on the **Data Lake** storage account (from `terraform/adls` state).
 - **App settings:** Postgres connection (from Postgres state), RAW storage/container, AzureWebJobsStorage, **`AzureWebJobsFeatureFlags=EnableWorkerIndexing`** (required for Python v2 so functions register in the host), `POSTGRES_TIMER_SCHEDULE`.
 - **Runtime controls:** `INGESTION_MODE` (`initial`/`incremental`), `RAW_FORMAT` (`jsonl`), optional `INGEST_TABLE_CONFIG_JSON`, `INGEST_CHUNK_SIZE`, optional `RAW_PREFIX` (default `postgres_ingest`), and ADLS watermark checkpoints under `_control/postgres_watermarks/`.

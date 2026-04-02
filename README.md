@@ -39,7 +39,7 @@ RetailFlow/
 │   ├── adls/                 # ADLS Gen2 retailflowdevdls (separate state)
 │   ├── databricks/           # Layer 2: Databricks workspace (retailflow-dev-dbw, standard)
 │   ├── postgres/             # Optional: Olist PostgreSQL Flexible Server (private, base VNet)
-│   ├── postgres_ingest_function/  # Azure Function: Postgres → ADLS RAW (run after base + postgres)
+│   ├── postgres_ingest_function/  # Azure Function: Postgres → ADLS RAW (after Platform + Data Lake + Postgres)
 │   ├── bastion/              # Optional: Azure Bastion Standard (run after base; destroy when idle to save cost)
 │   ├── modules/              # Legacy/shared: databricks, storage, key_vault, networking
 │   ├── main.tf               # Legacy single-root (optional)
@@ -274,6 +274,7 @@ See [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md) for implementation checklist. **Fir
 - **Olist: "Load dataset into Postgres" stuck on "Waiting for a runner to pick up this job":** The bootstrap job runs on a **self-hosted** runner (the bootstrap VM). You must run **register_only** first so the runner is installed and registered. After **register_only** completes, in GitHub go to **Settings → Actions → Runners** and wait until a runner with labels `self-hosted`, `linux` shows status **Idle**. Then run **bootstrap_only**. If it still waits: confirm the bootstrap VM is running in Azure (resource group and VM name match the workflow inputs, default `retailflow-dev-rg` / `retailflow-dev-bootstrap-vm`), and that the **Install runner on VM** step in the register_only run succeeded (the workflow now fails that step if Azure run-command fails).
 - **Postgres ingest — deploy step `Read timed out` to `*.scm.azurewebsites.net`:** The **Provision Postgres Ingest Function** workflow uses **`az webapp deploy`** (configurable timeout + retries) instead of **`config-zip`**, which often fails when Kudu/SCM responds slowly. If deploy still fails, retry the workflow; check **Networking** on the Function App if SCM is unreachable from GitHub-hosted runners.
 - **Postgres RAW load workflow — `Request Timeout` from Azure CLI or slow invoke:** **`az functionapp keys list`** can time out on ARM; the workflows retry and set **`AZURE_CORE_HTTP_TIMEOUT`**. Very large **initial** loads need the deployed **`host.json` `functionTimeout`** (included in the function zip). Confirm **Application Insights** if the HTTP call returns 5xx while the function is still running.
+- **ADLS — `az storage blob list` permission error or size sum `0`:** Listing blobs with **`--auth-mode login`** needs a **data-plane** role on the storage account (e.g. **Storage Blob Data Reader**). **Owner** on the RG alone is not enough. Alternatively use **`--auth-mode key`** with the account key if your policy allows.
 
 ---
 
