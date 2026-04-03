@@ -37,7 +37,8 @@ RetailFlow/
 │   ├── base/                 # Layer 1 (platform): RG, VNet, subnets, NSGs, Postgres DNS (no ADLS; no bootstrap VM)
 │   ├── bootstrap_vm/         # On-demand toolbox VM (separate state)
 │   ├── adls/                 # ADLS Gen2 retailflowdevdls (separate state)
-│   ├── databricks/           # Layer 2: Databricks workspace (retailflow-dev-dbw, standard)
+│   ├── databricks_workspace/ # Layer 2a: Azure Databricks workspace (RM only; long-lived state)
+│   ├── databricks/           # Layer 2b: clusters + jobs (compute; separate state; destroy without losing workspace)
 │   ├── postgres/             # Optional: Olist PostgreSQL Flexible Server (private, base VNet)
 │   ├── postgres_ingest_function/  # Azure Function: Postgres → ADLS RAW (after Platform + Data Lake + Postgres)
 │   ├── bastion/              # Optional: Azure Bastion Standard (run after base; destroy when idle to save cost)
@@ -66,12 +67,12 @@ RetailFlow/
 │   ├── TOOLBOX.md             # Toolbox on bootstrap VM (psql, Python); Bastion + Entra to connect
 │   ├── UNITY_CATALOG.md
 │   └── OBSERVABILITY.md
-├── .github/workflows/         # CI/CD: tfstate, platform/data-lake/bootstrap-vm/databricks, bastion, olist postgres, postgres ingest fn, deploy, promote, tests
+├── .github/workflows/         # CI/CD: tfstate, platform/data-lake/bootstrap-vm/databricks-workspace+databricks-compute, bastion, olist postgres, postgres ingest fn, deploy, promote, tests
 ├── .gitignore
 └── README.md
 ```
 
-**CI entry point:** Run [Provision Terraform State Backend (Dev)](.github/workflows/provision-tfstate-dev.yml) first (OIDC). Then [Terraform Platform (Dev)](.github/workflows/terraform-platform-dev.yml), [Terraform Data Lake (Dev)](.github/workflows/terraform-data-lake-dev.yml) for ADLS, optionally [Terraform Bootstrap VM (Dev)](.github/workflows/terraform-bootstrap-vm-dev.yml) for the toolbox VM, then [Terraform Databricks (Dev)](.github/workflows/terraform-databricks-dev.yml) for the workspace. Optionally [Provision Terraform State Backend (Prod)](.github/workflows/provision-tfstate-prod.yml) for separate prod state.
+**CI entry point:** Run [Provision Terraform State Backend (Dev)](.github/workflows/provision-tfstate-dev.yml) first (OIDC). Then [Terraform Platform (Dev)](.github/workflows/terraform-platform-dev.yml), [Terraform Data Lake (Dev)](.github/workflows/terraform-data-lake-dev.yml) for ADLS, optionally [Terraform Bootstrap VM (Dev)](.github/workflows/terraform-bootstrap-vm-dev.yml) for the toolbox VM, then [Terraform Databricks Workspace (Dev)](.github/workflows/terraform-databricks-workspace-dev.yml) for the Azure workspace, then [Terraform Databricks (Dev)](.github/workflows/terraform-databricks-dev.yml) for clusters and jobs. Optionally [Provision Terraform State Backend (Prod)](.github/workflows/provision-tfstate-prod.yml) for separate prod state.
 
 ---
 
@@ -162,14 +163,16 @@ Main pipeline job **RetailFlow_Main_Pipeline** is defined and provisioned in Ter
 
 **Default region:** All resources (state backend, base, Databricks, optional PostgreSQL) use **East US 2** by default to avoid subscription restrictions (e.g. `LocationIsOfferRestricted` for PostgreSQL in East US). Override via workflow inputs or Terraform variables if needed.
 
-The **primary** split is **Layer 1 (platform)** vs **Layer 2 (Databricks)** so core networking and the workspace can be managed independently. **ADLS** and the **bootstrap VM** use separate states for lifecycle control. **Optional** Terraform states (Bastion, Postgres, Postgres ingest function) sit beside that split. We use **OIDC + GitHub Actions** for Terraform in CI (no client secret for those OIDC workflows).
+The **primary** split is **Layer 1 (platform)** vs **Layer 2 (Databricks)**. Layer 2 is further split: **`terraform/databricks_workspace`** (Azure RM workspace + SP Contributor) and **`terraform/databricks`** (cluster + jobs only) so you can **`terraform destroy` compute** while keeping the workspace and notebooks. **ADLS** and the **bootstrap VM** use separate states for lifecycle control. **Optional** Terraform states (Bastion, Postgres, Postgres ingest function) sit beside that split. We use **OIDC + GitHub Actions** for Terraform in CI (no client secret for those OIDC workflows).
 
 - **State backend first:** Run **Provision Terraform State Backend (Dev)** (creates `retailflow-dev-tfstate-rg`, storage `retailflowdevtfstate`). Optionally run **Provision Terraform State Backend (Prod)** for prod. See [terraform/backend/README.md](terraform/backend/README.md).
 - **Layer 1 – Platform (terraform/base):** Resource group, VNet, subnets (Databricks, Postgres delegated, private endpoints), NSGs, Postgres private DNS. **No** ADLS, **no** bootstrap VM. Managed by **[Terraform Platform (Dev)](.github/workflows/terraform-platform-dev.yml)** — `plan` \| `apply` \| `destroy`. State: `retailflow-dev-base.tfstate`.
 - **Data Lake (terraform/adls):** ADLS Gen2 `retailflowdevdls`, filesystems **raw, bronze, silver, gold**, optional blob private endpoint. Separate state: **[Terraform Data Lake (Dev)](.github/workflows/terraform-data-lake-dev.yml)** (`retailflow-dev-adls.tfstate`). Run after Platform apply.
 - **Bootstrap VM (terraform/bootstrap_vm):** On-demand toolbox / Olist runner VM. **[Terraform Bootstrap VM (Dev)](.github/workflows/terraform-bootstrap-vm-dev.yml)** — apply when needed, destroy to save cost. State: `retailflow-dev-bootstrap-vm.tfstate`. Requires Platform applied first.
 - **Optional – Bastion (terraform/bastion):** Azure Bastion (**Standard**) for browser SSH to the private bootstrap VM. Run **after** Platform, **Bootstrap VM**, and (for RBAC) Data Lake as needed. **Destroy when idle.** Managed by **[Terraform Bastion (Dev)](.github/workflows/terraform-bastion-dev.yml)**. State: `retailflow-dev-bastion.tfstate`. **Before destroying platform networking**, destroy Bastion if it exists.
-- **Layer 2 – Databricks (terraform/databricks):** Workspace `retailflow-dev-dbw`, dev cluster, main pipeline job. Depends on Platform. Managed by **[Terraform Databricks (Dev)](.github/workflows/terraform-databricks-dev.yml)**. **Apply order:** Platform → (Data Lake, optional VM) → Databricks. **Destroy order:** Databricks first, then optional layers, then Platform last.
+- **Layer 2a – Databricks workspace (`terraform/databricks_workspace`):** Azure RM workspace `retailflow-dev-dbw` (Standard, VNet-injected) and optional **Contributor** for the CI service principal. State: **`retailflow-dev-databricks-workspace.tfstate`**. **[Terraform Databricks Workspace (Dev)](.github/workflows/terraform-databricks-workspace-dev.yml)**. Run after Platform.
+- **Layer 2b – Databricks compute (`terraform/databricks`):** Dev cluster and job **RetailFlow_Main_Pipeline**; reads workspace outputs from Layer 2a remote state. State: **`retailflow-dev-databricks-compute.tfstate`**. **[Terraform Databricks (Dev)](.github/workflows/terraform-databricks-dev.yml)**. Run after Layer 2a. **Destroy compute** here to drop job/cluster cost **without** deleting the workspace; destroy the workspace stack only when you intend to remove the workspace entirely.
+- **Apply order:** Platform → (Data Lake, optional VM) → **Databricks Workspace** → **Databricks (compute)**. **Teardown (typical):** **Databricks (compute)** destroy → optional Bastion / Postgres / etc. → **Databricks Workspace** destroy (if removing workspace) → Data Lake → Platform last.
 - **Optional – Olist PostgreSQL (terraform/postgres):** Private PostgreSQL Flexible Server in the platform VNet. Bootstrap VM (when applied) loads Olist CSVs via `provision_olist_postgres.yml`. State: `retailflow-ingest-pg.tfstate`. Run after Platform.
 - **Optional – Postgres Ingest Function (terraform/postgres_ingest_function):** Timer + HTTP Postgres → ADLS RAW. Run **after** Platform, **Data Lake**, and Postgres (apply). Managed by **Provision Postgres Ingest Function** (`provision_postgres_ingest_function.yml`). State: `retailflow-postgres-ingest-function.tfstate`. See [terraform/postgres_ingest_function/README.md](terraform/postgres_ingest_function/README.md) for deploy behavior and **Python v2** app settings.
 - **When PostgreSQL is your source-of-origin:** Run **Provision PostgreSQL for Olist** before the ingest function. Recommended order: **Platform → Data Lake → Postgres → Postgres Ingest Function** (VM/Bootstrap when loading CSVs).
@@ -195,10 +198,13 @@ All workflows are **manual** (`workflow_dispatch`) unless noted.
 4. **Terraform Bootstrap VM (Dev)** (optional, on-demand) — `terraform-bootstrap-vm-dev.yml`  
    Apply when you need the toolbox/Olist runner VM; destroy when idle.
 
-5. **Terraform Databricks (Dev)** — `terraform-databricks-dev.yml`  
-   `plan` then `apply`. Workspace `retailflow-dev-dbw`, dev cluster, job `RetailFlow_Main_Pipeline`. Run after step 2 (Platform). **Secrets:** `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_PRINCIPAL_ID`. **OIDC only.** See [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md).
+5. **Terraform Databricks Workspace (Dev)** — `terraform-databricks-workspace-dev.yml`  
+   `plan` then `apply`. Azure Databricks workspace `retailflow-dev-dbw` and optional SP **Contributor** on the workspace. Run after Platform (step 2). **Secrets:** `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_PRINCIPAL_ID`. **OIDC only.** See [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md).
 
-6. **After infra is up (any order):** deploy notebooks (`deploy-notebooks.yml`), deploy jobs (`deploy-jobs.yml`), configure secret scope, bootstrap RAW, run Airflow DAGs, dbt marts, sync Gold to Snowflake (when configured), monitoring.
+6. **Terraform Databricks (Dev)** — `terraform-databricks-dev.yml`  
+   `plan` then `apply`. Dev cluster and job `RetailFlow_Main_Pipeline` (reads workspace from remote state). Run after step 5. Same OIDC secrets as step 5.
+
+7. **After infra is up (any order):** deploy notebooks (`deploy-notebooks.yml`), deploy jobs (`deploy-jobs.yml`), configure secret scope, bootstrap RAW, run Airflow DAGs, dbt marts, sync Gold to Snowflake (when configured), monitoring.
 
 - **Azure Bastion (optional, on-demand):** **Terraform Bastion (Dev)** — `terraform-bastion-dev.yml`. Run **after** Platform, **Bootstrap VM** (if using SSH), and Data Lake as needed. **Destroy** when done.
 
@@ -212,7 +218,7 @@ The function writes chunked JSONL under **`postgres_ingest/`**, checkpoints in *
 
 - **Tests:** Run `tests.yml` anytime.
 
-- **Destroy (full teardown):** **Terraform Databricks (Dev)** `destroy` → **Terraform Bastion (Dev)** `destroy` (if used) → **Provision Postgres Ingest Function** `destroy` → **Provision PostgreSQL for Olist** `destroy` (if used) → **Terraform Bootstrap VM (Dev)** `destroy` → **Terraform Data Lake (Dev)** `destroy` → **Terraform Platform (Dev)** `destroy`. Order matters for dependencies.
+- **Destroy (full teardown):** **Terraform Databricks (Dev)** `destroy` (compute only; keeps workspace) → **Terraform Bastion (Dev)** `destroy` (if used) → **Provision Postgres Ingest Function** `destroy` → **Provision PostgreSQL for Olist** `destroy` (if used) → **Terraform Bootstrap VM (Dev)** `destroy` → **Terraform Data Lake (Dev)** `destroy` → **Terraform Databricks Workspace (Dev)** `destroy` (removes workspace; run after compute destroy) → **Terraform Platform (Dev)** `destroy`. Order matters for dependencies.
 
 ---
 
@@ -224,7 +230,8 @@ The function writes chunked JSONL under **`postgres_ingest/`**, checkpoints in *
 - **terraform-data-lake-dev.yml:** ADLS Gen2 `retailflowdevdls`. Input: `action` (plan \| apply \| destroy). Step 3.
 - **terraform-bootstrap-vm-dev.yml:** On-demand toolbox VM. Input: `action` (plan \| apply \| destroy). Step 4 (optional).
 - **terraform-bastion-dev.yml:** Optional Bastion (**Standard**). After Platform + Bootstrap VM. Input: optional `aad_admin_object_id`.
-- **terraform-databricks-dev.yml:** Layer 2 – workspace, dev cluster, main pipeline job. Step 5.
+- **terraform-databricks-workspace-dev.yml:** Layer 2a – Azure Databricks workspace (RM) + SP Contributor. Step 5.
+- **terraform-databricks-dev.yml:** Layer 2b – dev cluster, main pipeline job (compute). Step 6.
 - **deploy-notebooks.yml:** Sync notebooks to Databricks (e.g. via Repos).
 - **deploy-jobs.yml:** Deploy/update Databricks jobs from repo.
 - **promote-environment.yml:** Promote to prod or stg (workflow offers both; config + optional Terraform).
@@ -236,7 +243,7 @@ The function writes chunked JSONL under **`postgres_ingest/`**, checkpoints in *
 
 Workflows live in [.github/workflows/](.github/workflows/).
 
-- **Secrets:** Terraform Azure (OIDC): `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (passed as `ARM_*`). Terraform Databricks (Dev): same OIDC app + **`AZURE_PRINCIPAL_ID`** (service principal Object ID for workspace Contributor assignment); **no** `ARM_CLIENT_SECRET` for this workflow. See [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md). Optional (deploy-notebooks/jobs): `DATABRICKS_HOST`, `DATABRICKS_TOKEN`. Promote: `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`. **Olist:** **`GH_PAT`** for `full` and `register_only`. **`POSTGRES_*`** optional for `bootstrap_only` (used only if Terraform state has no outputs).
+- **Secrets:** Terraform Azure (OIDC): `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (passed as `ARM_*`). **Terraform Databricks Workspace (Dev)** and **Terraform Databricks (Dev):** same OIDC app + **`AZURE_PRINCIPAL_ID`** (service principal Object ID for workspace Contributor assignment in the workspace stack); **no** `ARM_CLIENT_SECRET`. See [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md). Optional (deploy-notebooks/jobs): `DATABRICKS_HOST`, `DATABRICKS_TOKEN`. Promote: `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`. **Olist:** **`GH_PAT`** for `full` and `register_only`. **`POSTGRES_*`** optional for `bootstrap_only` (used only if Terraform state has no outputs).
 
 ---
 
@@ -262,14 +269,14 @@ See [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md).
 
 ## Next steps
 
-See [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md) for implementation checklist. **First:** **Provision Terraform State Backend (Dev)** → **Terraform Platform (Dev)** `apply` → **Terraform Data Lake (Dev)** `apply` → optionally **Terraform Bootstrap VM (Dev)** → **Terraform Databricks (Dev)** `apply`.
+See [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md) for implementation checklist. **First:** **Provision Terraform State Backend (Dev)** → **Terraform Platform (Dev)** `apply` → **Terraform Data Lake (Dev)** `apply` → optionally **Terraform Bootstrap VM (Dev)** → **Terraform Databricks Workspace (Dev)** `apply` → **Terraform Databricks (Dev)** `apply`.
 
 ---
 
 ## Troubleshooting
 
 - **ContainerNotFound** when running Terraform workflows: create the **tfstate** container on **retailflowdevtfstate** if missing, then re-run. See [terraform/backend/README.md](terraform/backend/README.md#troubleshooting).
-- **AuthorizationFailed** on `roleAssignments/write` when running **Terraform Databricks (Dev)** or **Terraform Bastion (Dev)** (`bootstrap_vm_admin_login`): The GitHub Actions service principal needs **User Access Administrator** (or Owner) on the subscription or resource group to create role assignments. Grant that role in Azure Portal (Subscription or **retailflow-dev-rg** → Access control (IAM) → Add role assignment). For Databricks, see [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md). For Bastion: if you cannot grant that permission, leave `aad_admin_object_id` / `AAD_ADMIN_OBJECT_ID` empty and assign **Virtual Machine Administrator Login** (or User Login) to your user on the bootstrap VM manually in Portal → VM → Access control (IAM); Bastion + Entra SSH can still work. See [docs/BASTION.md](docs/BASTION.md).
+- **AuthorizationFailed** on `roleAssignments/write` when running **Terraform Databricks Workspace (Dev)** or **Terraform Bastion (Dev)** (`bootstrap_vm_admin_login`): The GitHub Actions service principal needs **User Access Administrator** (or Owner) on the subscription or resource group to create role assignments. Grant that role in Azure Portal (Subscription or **retailflow-dev-rg** → Access control (IAM) → Add role assignment). For Databricks workspace Contributor assignment, see [docs/DATABRICKS_AZURE_AUTH.md](docs/DATABRICKS_AZURE_AUTH.md). For Bastion: if you cannot grant that permission, leave `aad_admin_object_id` / `AAD_ADMIN_OBJECT_ID` empty and assign **Virtual Machine Administrator Login** (or User Login) to your user on the bootstrap VM manually in Portal → VM → Access control (IAM); Bastion + Entra SSH can still work. See [docs/BASTION.md](docs/BASTION.md).
 - **Postgres ingest Function — `401 Unauthorized` / “ElasticPremium VMs” / “additional quota” on apply:** The Function App uses **Elastic Premium EP1** for VNet integration. A limit of **0** in your region means you must **request a quota increase** via **Help + support** (quota ticket) or the portal Quotas UI if it lists the limit. The message is **quota**, not GitHub OIDC. Details: [terraform/postgres_ingest_function/README.md — Troubleshooting](terraform/postgres_ingest_function/README.md#troubleshooting).
 - **Olist: "Load dataset into Postgres" stuck on "Waiting for a runner to pick up this job":** The bootstrap job runs on a **self-hosted** runner (the bootstrap VM). You must run **register_only** first so the runner is installed and registered. After **register_only** completes, in GitHub go to **Settings → Actions → Runners** and wait until a runner with labels `self-hosted`, `linux` shows status **Idle**. Then run **bootstrap_only**. If it still waits: confirm the bootstrap VM is running in Azure (resource group and VM name match the workflow inputs, default `retailflow-dev-rg` / `retailflow-dev-bootstrap-vm`), and that the **Install runner on VM** step in the register_only run succeeded (the workflow now fails that step if Azure run-command fails).
 - **Postgres ingest — deploy step `Read timed out` to `*.scm.azurewebsites.net`:** The **Provision Postgres Ingest Function** workflow uses **`az webapp deploy`** (configurable timeout + retries) instead of **`config-zip`**, which often fails when Kudu/SCM responds slowly. If deploy still fails, retry the workflow; check **Networking** on the Function App if SCM is unreachable from GitHub-hosted runners.

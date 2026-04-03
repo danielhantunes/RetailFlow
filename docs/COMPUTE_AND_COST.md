@@ -73,7 +73,7 @@ A **~$50/month** midpoint for Azure + Databricks is a reasonable estimate; add S
 ## Reducing cost: plan and destroy
 
 - **Terraform plan** does not create resources; cost is negligible.
-- **After destroying resources**, you stop paying for them. Destroy **Databricks** (Terraform Databricks layer) to eliminate Databricks cost (~$15–25/month). Destroy **base** as well to remove ADLS, VNet, Key Vault, etc.
+- **After destroying resources**, you stop paying for them. Destroy **Terraform Databricks (Dev)** (compute: job + clusters) to cut pipeline compute cost while **keeping** the workspace. Destroy **Terraform Databricks Workspace (Dev)** only when you want to remove the workspace entirely (~$15–25/month workspace floor varies by SKU). Destroy **base** as well to remove ADLS, VNet, Key Vault, etc.
 - The only remaining cost after a full destroy is usually the **Terraform state backend** (storage account for tfstate) if you keep it for future runs—typically **$1–5/month**. Destroy that too for **$0**.
 
-**Destroy order:** Terraform Databricks (Dev) destroy first, then Bastion, Postgres ingest, Olist Postgres, Bootstrap VM, Data Lake, then Platform (Dev). To remove optional Olist Postgres and its state, run **Provision PostgreSQL for Olist** with `action: destroy` (can be run before or after base destroy). See [README — CI/CD](../README.md#cicd-github-actions).
+**Destroy order:** **Terraform Databricks (Dev)** destroy (compute), then Bastion, Postgres ingest, Olist Postgres, Bootstrap VM, Data Lake, **Terraform Databricks Workspace (Dev)** destroy (workspace), then Platform (Dev). To remove optional Olist Postgres and its state, run **Provision PostgreSQL for Olist** with `action: destroy` (can be run before or after base destroy). See [README — CI/CD](../README.md#cicd-github-actions).

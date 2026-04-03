@@ -10,7 +10,8 @@ RetailFlow/
 │       ├── terraform-data-lake-dev.yml  # ADLS retailflowdevdls (separate state)
 │       ├── terraform-bootstrap-vm-dev.yml  # On-demand toolbox VM (separate state)
 │       ├── terraform-bastion-dev.yml   # Optional Bastion (after platform + bootstrap VM)
-│       ├── terraform-databricks-dev.yml
+│       ├── terraform-databricks-workspace-dev.yml  # Azure Databricks workspace (RM); before compute
+│       ├── terraform-databricks-dev.yml            # Clusters + jobs (compute)
 │       ├── provision_olist_postgres.yml   # Optional: Olist PostgreSQL (plan/apply/destroy/full/register_only/bootstrap_only)
 │       ├── provision_postgres_ingest_function.yml   # Azure Function Postgres → RAW (after platform + data lake + postgres)
 │       ├── run_postgres_raw_initial_load.yml   # Manual one-time trigger of Postgres→RAW Function (initial mode)
@@ -110,11 +111,17 @@ RetailFlow/
 │   │   ├── variables.tf
 │   │   ├── outputs.tf
 │   │   └── README.md
-│   ├── databricks/               # Layer 2: Databricks workspace
+│   ├── databricks_workspace/     # Layer 2a: Azure Databricks workspace (RM only)
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   ├── outputs.tf
+│   │   └── README.md
+│   ├── databricks/               # Layer 2b: clusters + jobs (compute)
 │   │   ├── main.tf
 │   │   ├── databricks_resources.tf   # Job + cluster definitions
 │   │   ├── variables.tf
 │   │   ├── outputs.tf
+│   │   ├── MIGRATION.md
 │   │   └── README.md
 │   ├── main.tf                   # Legacy single-root (optional)
 │   ├── variables.tf

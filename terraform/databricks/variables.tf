@@ -14,10 +14,10 @@ variable "tfstate_container_name" {
   default     = "tfstate"
 }
 
-variable "tfstate_base_key" {
-  description = "State file key for base layer (e.g. retailflow-dev-base.tfstate)"
+variable "tfstate_databricks_workspace_key" {
+  description = "State file key for terraform/databricks_workspace (e.g. retailflow-dev-databricks-workspace.tfstate)"
   type        = string
-  default     = "retailflow-dev-base.tfstate"
+  default     = "retailflow-dev-databricks-workspace.tfstate"
 }
 
 variable "tags" {
@@ -26,22 +26,8 @@ variable "tags" {
   default     = {}
 }
 
-# Set from workflow: after first apply, export from Terraform outputs so job and cluster can be created.
-variable "databricks_host" {
-  description = "Databricks workspace URL (e.g. https://adb-xxx.azuredatabricks.net). Leave empty on first apply; set from output on second apply."
-  type        = string
-  default     = ""
-}
-
-variable "databricks_workspace_resource_id" {
-  description = "Azure resource ID of the Databricks workspace (e.g. /subscriptions/.../resourceGroups/.../providers/Microsoft.Databricks/workspaces/retailflow-dev-dbw). Set from output on second apply when using Azure AD auth."
-  type        = string
-  default     = ""
-}
-
-# Object ID of the Azure AD Service Principal (Enterprise Application). When set, Terraform grants this principal Contributor on the workspace so it can use the Databricks API (no manual add to workspace). Set in CI via TF_VAR_azure_principal_id (e.g. from secret AZURE_PRINCIPAL_ID).
 variable "azure_principal_id" {
-  description = "Azure AD Service Principal Object ID (Enterprise Application). Used to grant Contributor on the Databricks workspace so the SP can authenticate to the Databricks API. Set in CI for apply/destroy."
+  description = "Unused in this stack (workspace role is in databricks_workspace). Kept for workflow env compatibility."
   type        = string
   default     = ""
 }

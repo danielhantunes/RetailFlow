@@ -1,22 +1,19 @@
-output "workspace_id" {
-  description = "Azure resource ID of the Databricks workspace (use for azure_workspace_resource_id / DATABRICKS_AZURE_RESOURCE_ID)"
-  value       = azurerm_databricks_workspace.workspace.id
-}
-
 output "workspace_url" {
-  value = "https://${azurerm_databricks_workspace.workspace.workspace_url}"
+  description = "Databricks workspace URL (from remote state)"
+  value       = local.databricks_host
 }
 
-output "workspace_name" {
-  value = azurerm_databricks_workspace.workspace.name
+output "workspace_id" {
+  description = "Azure workspace resource ID (from remote state)"
+  value       = local.databricks_workspace_resource_id
 }
 
 output "job_id" {
-  description = "RetailFlow_Main_Pipeline job ID (when created)"
-  value       = try(one(databricks_job.main_pipeline[*].id), null)
+  description = "RetailFlow_Main_Pipeline job ID"
+  value       = databricks_job.main_pipeline.id
 }
 
 output "dev_cluster_id" {
-  description = "Dev single-node cluster ID (when created)"
-  value       = try(one(databricks_cluster.dev[*].id), null)
+  description = "Dev single-node cluster ID"
+  value       = databricks_cluster.dev.id
 }

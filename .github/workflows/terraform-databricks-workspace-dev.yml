@@ -1,9 +1,8 @@
-# Databricks compute only: dev cluster + RetailFlow_Main_Pipeline job. Workspace is a separate workflow/state.
-# Requires: Terraform Platform (Dev) + Terraform Databricks Workspace (Dev) applied.
-# Destroy here removes jobs/cluster only — workspace and notebooks remain unless you destroy the workspace workflow.
-# Databricks provider: azure-cli auth from azure/login (OIDC). See docs/DATABRICKS_AZURE_AUTH.md.
+# Databricks workspace (Azure RM) only — long-lived. VNet-injected Standard workspace + SP Contributor.
+# Run after Terraform Platform (Dev). Run Terraform Databricks (Dev) after this for clusters + jobs.
+# State: retailflow-dev-databricks-workspace.tfstate
 
-name: Terraform Databricks (Dev)
+name: Terraform Databricks Workspace (Dev)
 on:
   workflow_dispatch:
     inputs:
@@ -22,7 +21,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: terraform-databricks-dev-${{ github.ref }}
+  group: terraform-databricks-workspace-dev-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -34,11 +33,12 @@ env:
   TF_BACKEND_RESOURCE_GROUP: retailflow-dev-tfstate-rg
   TF_BACKEND_STORAGE_ACCOUNT: retailflowdevtfstate
   TF_BACKEND_CONTAINER: tfstate
-  TF_BACKEND_KEY: retailflow-dev-databricks-compute.tfstate
+  TF_BACKEND_KEY: retailflow-dev-databricks-workspace.tfstate
   TF_VAR_tfstate_resource_group_name: retailflow-dev-tfstate-rg
   TF_VAR_tfstate_storage_account_name: retailflowdevtfstate
   TF_VAR_tfstate_container_name: tfstate
-  TF_VAR_tfstate_databricks_workspace_key: retailflow-dev-databricks-workspace.tfstate
+  TF_VAR_tfstate_base_key: retailflow-dev-base.tfstate
+  TF_VAR_azure_principal_id: ${{ secrets.AZURE_PRINCIPAL_ID }}
 
 jobs:
   terraform:
@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: terraform/databricks
+        working-directory: terraform/databricks_workspace
     steps:
       - name: Checkout
         uses: actions/checkout@v4

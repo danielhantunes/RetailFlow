@@ -1,6 +1,6 @@
 # Databricks authentication with Azure AD (Service Principal)
 
-The **Terraform Databricks (Dev)** workflow uses the **same** Azure AD Service Principal you already use for Terraform (Azure RM), with **OIDC only** (no client secret). The Databricks Terraform provider uses **azure-cli** auth, so it uses the credential established by the `azure/login` step (OIDC). Access to the workspace is **automated via Terraform**: Terraform grants **Contributor** on the workspace resource to the SP, and identities with Contributor or Owner on the workspace resource in Azure automatically get workspace admin permission when accessing Databricks (including the API). You do not need to add the app to the workspace manually, even when running apply/destroy frequently.
+**Terraform Databricks Workspace (Dev)** and **Terraform Databricks (Dev)** use the **same** Azure AD Service Principal you already use for Terraform (Azure RM), with **OIDC only** (no client secret). The Databricks Terraform provider uses **azure-cli** auth, so it uses the credential established by the `azure/login` step (OIDC). Access to the workspace is **automated via Terraform** in the workspace stack: Terraform grants **Contributor** on the workspace resource to the SP, and identities with Contributor or Owner on the workspace resource in Azure automatically get workspace admin permission when accessing Databricks (including the API). You do not need to add the app to the workspace manually, even when running apply/destroy frequently.
 
 ## Steps
 
@@ -18,13 +18,14 @@ For **Databricks**, the Terraform provider uses **azure-cli** authentication, so
 
 ### 2. Workspace access (automated via Terraform)
 
-The Databricks layer Terraform includes an **`azurerm_role_assignment`** that grants the SP (using `azure_principal_id`) the **Contributor** role on the workspace resource. In Azure Databricks, identities with Contributor or Owner on the workspace resource automatically get workspace admin permission when accessing the workspace (including API calls). So after the first apply:
+The **workspace** stack (`terraform/databricks_workspace`) includes an **`azurerm_role_assignment`** that grants the SP (using `azure_principal_id`) the **Contributor** role on the workspace resource. In Azure Databricks, identities with Contributor or Owner on the workspace resource automatically get workspace admin permission when accessing the workspace (including API calls). After **Terraform Databricks Workspace (Dev)** apply:
 
 1. The workspace is created.
 2. Terraform assigns Contributor on the workspace to that SP.
-3. The second apply can authenticate with the same SP and create the job and cluster with no manual step.
 
-On each **destroy**, the role assignment is removed together with the workspace. On the next **apply**, the workspace and role assignment are created again. Nothing needs to be done manually in Databricks.
+The **compute** stack (`terraform/databricks`) runs **after** the workspace stack. It reads `workspace_url` / `workspace_id` from the workspace remote state and uses a **single** `terraform apply` to create the dev cluster and job—no second apply and no manual `DATABRICKS_HOST` secrets.
+
+Destroying **Terraform Databricks (Dev)** removes job and cluster only; the workspace and role assignment remain until you destroy **Terraform Databricks Workspace (Dev)**. Destroying the workspace stack removes the role assignment with the workspace. Nothing needs to be done manually in Databricks for routine apply/destroy of compute.
 
 ### 3. GitHub secrets
 
@@ -44,10 +45,12 @@ The workflow passes `AZURE_PRINCIPAL_ID` as `TF_VAR_azure_principal_id`. If this
 
 ### 4. Workflow behavior
 
-- **Apply:** The first apply creates the workspace and the role assignment (Contributor for the SP). The workflow reads the `workspace_url` and `workspace_id` outputs and runs a second apply with `TF_VAR_databricks_host` and `TF_VAR_databricks_workspace_resource_id`, creating the dev cluster and the job.
-- **Destroy:** The workflow reads the outputs from state and destroys the job, cluster, role assignment, and workspace in the correct order.
+- **Terraform Databricks Workspace (Dev):** One `apply` creates the workspace and the Contributor role assignment for the SP (when `AZURE_PRINCIPAL_ID` is set).
+- **Terraform Databricks (Dev):** One `apply` creates the dev cluster and main job; it loads workspace connection details from **remote state** (`retailflow-dev-databricks-workspace.tfstate` by default), not from a second apply.
+- **Destroy compute only:** **Terraform Databricks (Dev)** `destroy` removes the job and clusters; notebooks and the workspace stay.
+- **Destroy workspace:** **Terraform Databricks Workspace (Dev)** `destroy` removes the workspace (and its role assignments); run **after** compute destroy or when you accept losing the workspace.
 
-You do not need to set `DATABRICKS_HOST` or `DATABRICKS_TOKEN` in secrets; the workflow gets the host and resource ID from Terraform outputs.
+You do not need to set `DATABRICKS_HOST` or `DATABRICKS_TOKEN` for these Terraform workflows; compute reads host and workspace ID from remote state and OIDC.
 
 ---
 
@@ -61,7 +64,7 @@ the SP that runs Terraform **does not have permission to create role assignments
 
 **Option A (recommended):** Grant the SP the **User Access Administrator** role on the resource group that contains the workspace (e.g. `retailflow-dev-rg`), or on the subscription. In Azure Portal: **Resource group** → **Access control (IAM)** → **Add role assignment** → Role: **User Access Administrator** → Members: select the app (e.g. github-retailflow-oidc). Then run the workflow again.
 
-**Option B:** Do not use the role assignment in Terraform: remove the **`AZURE_PRINCIPAL_ID`** secret from the repo (or leave it empty). Terraform will not create the role assignment. Ensure the SP already has **Contributor** on the workspace resource (e.g. inherited from the RG or assigned manually once) so the second apply (job/cluster) can succeed.
+**Option B:** Do not use the role assignment in Terraform: remove the **`AZURE_PRINCIPAL_ID`** secret from the repo (or leave it empty). The workspace stack will not create the role assignment. Ensure the SP already has **Contributor** on the workspace resource (e.g. inherited from the RG or assigned manually once) so **Terraform Databricks (Dev)** (cluster/job) can authenticate.
 
 ---
 

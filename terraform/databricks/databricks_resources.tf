@@ -1,32 +1,18 @@
-# Dev cluster and Jobs pipeline — created only when databricks_host is set (second apply).
-# Authenticate to Databricks via Azure AD (same SP as Azure RM). Add the app to the Databricks workspace.
+# Dev cluster and Jobs pipeline. Requires workspace (terraform/databricks_workspace) applied.
 
-locals {
-  create_databricks_resources = var.databricks_host != ""
-}
-
-# Resolve LTS runtime and smallest node type at apply time (faster provisioning, fewer API lookups).
-# Only run when we have a real workspace host (second apply).
 data "databricks_spark_version" "latest_lts" {
-  count                = local.create_databricks_resources ? 1 : 0
-  long_term_support    = true
+  long_term_support = true
 }
 
-# Smallest node type with local disk (provider may not support min_cores/max_cores in this version).
 data "databricks_node_type" "smallest" {
-  count      = local.create_databricks_resources ? 1 : 0
   local_disk = true
 }
 
-# DEV: single-node cluster for development (see docs/COMPUTE_AND_COST.md).
-# driver_node_type_id and data sources reduce creation time (fewer API lookups, fixed types).
 resource "databricks_cluster" "dev" {
-  count = local.create_databricks_resources ? 1 : 0
-
   cluster_name            = "retailflow-dev-single-node"
-  spark_version           = data.databricks_spark_version.latest_lts[0].id
-  node_type_id            = data.databricks_node_type.smallest[0].id
-  driver_node_type_id     = data.databricks_node_type.smallest[0].id
+  spark_version           = data.databricks_spark_version.latest_lts.id
+  node_type_id            = data.databricks_node_type.smallest.id
+  driver_node_type_id     = data.databricks_node_type.smallest.id
   num_workers             = 1
   autotermination_minutes = 30
 
@@ -41,14 +27,11 @@ resource "databricks_cluster" "dev" {
   custom_tags = merge(var.tags, { "project" = "RetailFlow", "env" = "dev" })
 }
 
-# PROD-style job: RetailFlow_Main_Pipeline with job cluster (1–2 workers, Photon), terminates after run
 resource "databricks_job" "main_pipeline" {
-  count = local.create_databricks_resources ? 1 : 0
-
-  name                 = "RetailFlow_Main_Pipeline"
-  description          = "RAW → Bronze → Silver → Gold for retail data platform"
-  timeout_seconds      = 0
-  max_concurrent_runs   = 1
+  name                = "RetailFlow_Main_Pipeline"
+  description         = "RAW → Bronze → Silver → Gold for retail data platform"
+  timeout_seconds     = 0
+  max_concurrent_runs = 1
 
   schedule {
     quartz_cron_expression = "0 0 2 * * ?"
@@ -63,12 +46,12 @@ resource "databricks_job" "main_pipeline" {
   job_cluster {
     job_cluster_key = "job_cluster"
     new_cluster {
-      spark_version  = "14.3.x-photon-scala2.12"
-      node_type_id   = "Standard_D4as_v5"
+      spark_version = "14.3.x-photon-scala2.12"
+      node_type_id  = "Standard_D4as_v5"
       spark_conf = {
-        "spark.sql.adaptive.enabled" = "true"
-        "spark.databricks.delta.optimizeWrite.enabled" = "true"
-        "spark.databricks.delta.autoCompact.enabled"   = "true"
+        "spark.sql.adaptive.enabled"                       = "true"
+        "spark.databricks.delta.optimizeWrite.enabled"     = "true"
+        "spark.databricks.delta.autoCompact.enabled"       = "true"
       }
       autoscale {
         min_workers = 1
@@ -81,8 +64,8 @@ resource "databricks_job" "main_pipeline" {
   }
 
   task {
-    task_key     = "ingest_raw_orders"
-    max_retries  = 0
+    task_key    = "ingest_raw_orders"
+    max_retries = 0
     notebook_task {
       notebook_path = "/Workspace/Repos/retailflow/databricks/notebooks/raw/01_ingest_orders_api"
       source        = "WORKSPACE"
@@ -92,8 +75,8 @@ resource "databricks_job" "main_pipeline" {
   }
 
   task {
-    task_key     = "ingest_raw_customers"
-    max_retries  = 0
+    task_key    = "ingest_raw_customers"
+    max_retries = 0
     notebook_task {
       notebook_path = "/Workspace/Repos/retailflow/databricks/notebooks/raw/02_ingest_customers_api"
       source        = "WORKSPACE"

@@ -1,15 +1,20 @@
-# Layer 2 – Databricks (dev)
+# Layer 2b – Databricks compute (dev)
 
-Provisions:
+Provisions **only** Databricks **resources** (not the Azure workspace):
 
-- **Azure Databricks workspace:** `retailflow-dev-dbw`, standard tier, VNet-injected.
-- **Dev cluster:** `retailflow-dev-single-node` (single node, Standard_D4as_v5, 30 min auto-terminate).
-- **Main pipeline job:** `RetailFlow_Main_Pipeline` (job cluster 1–2 workers, Photon, LTS).
+- **Dev cluster:** `retailflow-dev-single-node`
+- **Job:** `RetailFlow_Main_Pipeline` (scheduled, job cluster with Photon)
 
-Depends on Layer 1 (platform / base) via `terraform_remote_state`. Databricks resources (cluster, job) are created on the **second** apply once the workspace URL is available (the workflow does this automatically).
+**Workspace** (Azure RM) lives in **`terraform/databricks_workspace/`** and state **`retailflow-dev-databricks-workspace.tfstate`**. Apply that **first**.
 
-**Authentication:** OIDC-only via GitHub Actions. The workflow uses `azure/login` (OIDC) and the Databricks provider uses Azure AD auth based on that session. **No `ARM_CLIENT_SECRET` is required**. See [docs/DATABRICKS_AZURE_AUTH.md](../../docs/DATABRICKS_AZURE_AUTH.md).
+This stack reads **`workspace_url`** and **`workspace_id`** from remote state (`terraform_remote_state`) so a **single `terraform apply`** is enough.
 
-**State file:** `retailflow-dev-databricks.tfstate` (in `retailflow-dev-tfstate-rg` / `retailflowdevtfstate`).
+**State file:** `retailflow-dev-databricks-compute.tfstate`
 
-**CI:** **Terraform Databricks (Dev)** workflow (`terraform-databricks-dev.yml`). Run `plan` | `apply` | `destroy` via workflow_dispatch. Apply the **Platform** layer first.
+**CI:** [Terraform Databricks (Dev)](../../.github/workflows/terraform-databricks-dev.yml) — `plan` \| `apply` \| `destroy`.
+
+**Destroy:** Removes **job + dev cluster** only; the **Databricks workspace** and **notebooks** remain. To remove the workspace, use [Terraform Databricks Workspace (Dev)](../../.github/workflows/terraform-databricks-workspace-dev.yml) `destroy` (destructive).
+
+**Authentication:** OIDC via `azure/login`; Databricks provider uses **azure-cli**. The SP still needs **Contributor** on the workspace (created in the workspace stack). See [docs/DATABRICKS_AZURE_AUTH.md](../../docs/DATABRICKS_AZURE_AUTH.md).
+
+**Migration:** If you have an old combined state file, see [MIGRATION.md](MIGRATION.md).
