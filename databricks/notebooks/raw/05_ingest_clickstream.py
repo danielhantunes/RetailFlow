@@ -7,7 +7,7 @@
 # COMMAND ----------
 
 dbutils.widgets.text("source_path", "", "Source path (directory of NDJSON or single file)")
-dbutils.widgets.text("raw_base_path", "abfss://raw@retailflowdevsa.dfs.core.windows.net/data/raw/clickstream", "RAW base path")
+dbutils.widgets.text("raw_base_path", "abfss://raw@retailflowdevdls.dfs.core.windows.net/data/raw/clickstream", "RAW base path")
 source_path = dbutils.widgets.get("source_path")
 raw_base = dbutils.widgets.get("raw_base_path")
 

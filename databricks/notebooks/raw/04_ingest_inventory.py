@@ -7,7 +7,7 @@
 # COMMAND ----------
 
 dbutils.widgets.text("source_path", "", "Source path (file or directory)")
-dbutils.widgets.text("raw_base_path", "abfss://raw@retailflowdevsa.dfs.core.windows.net/data/raw/inventory", "RAW base path")
+dbutils.widgets.text("raw_base_path", "abfss://raw@retailflowdevdls.dfs.core.windows.net/data/raw/inventory", "RAW base path")
 dbutils.widgets.text("format", "json", "Source format: json or parquet")
 source_path = dbutils.widgets.get("source_path")
 raw_base = dbutils.widgets.get("raw_base_path")

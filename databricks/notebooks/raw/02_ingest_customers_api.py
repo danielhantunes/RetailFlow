@@ -5,7 +5,7 @@
 
 # COMMAND ----------
 
-dbutils.widgets.text("raw_base_path", "abfss://raw@retailflowdevsa.dfs.core.windows.net/data/raw/customers", "RAW base path")
+dbutils.widgets.text("raw_base_path", "abfss://raw@retailflowdevdls.dfs.core.windows.net/data/raw/customers", "RAW base path")
 dbutils.widgets.text("customers_api_url", "", "Customers API base URL")
 raw_base = dbutils.widgets.get("raw_base_path")
 api_base = dbutils.widgets.get("customers_api_url") or spark.conf.get("retailflow.customers_api_url", "")

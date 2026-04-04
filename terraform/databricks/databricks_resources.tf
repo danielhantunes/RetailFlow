@@ -110,6 +110,84 @@ resource "databricks_job" "main_pipeline" {
   }
 
   task {
+    task_key    = "bronze_products"
+    max_retries = 0
+    depends_on { task_key = "ingest_raw_orders" }
+    depends_on { task_key = "ingest_raw_customers" }
+    notebook_task {
+      notebook_path = "/Workspace/Repos/retailflow/databricks/notebooks/bronze/03_bronze_products"
+      source        = "WORKSPACE"
+    }
+    job_cluster_key = "job_cluster"
+    timeout_seconds = 3600
+  }
+
+  task {
+    task_key    = "bronze_order_items"
+    max_retries = 0
+    depends_on { task_key = "ingest_raw_orders" }
+    depends_on { task_key = "ingest_raw_customers" }
+    notebook_task {
+      notebook_path = "/Workspace/Repos/retailflow/databricks/notebooks/bronze/04_bronze_order_items"
+      source        = "WORKSPACE"
+    }
+    job_cluster_key = "job_cluster"
+    timeout_seconds = 3600
+  }
+
+  task {
+    task_key    = "bronze_order_payments"
+    max_retries = 0
+    depends_on { task_key = "ingest_raw_orders" }
+    depends_on { task_key = "ingest_raw_customers" }
+    notebook_task {
+      notebook_path = "/Workspace/Repos/retailflow/databricks/notebooks/bronze/05_bronze_order_payments"
+      source        = "WORKSPACE"
+    }
+    job_cluster_key = "job_cluster"
+    timeout_seconds = 3600
+  }
+
+  task {
+    task_key    = "bronze_order_reviews"
+    max_retries = 0
+    depends_on { task_key = "ingest_raw_orders" }
+    depends_on { task_key = "ingest_raw_customers" }
+    notebook_task {
+      notebook_path = "/Workspace/Repos/retailflow/databricks/notebooks/bronze/06_bronze_order_reviews"
+      source        = "WORKSPACE"
+    }
+    job_cluster_key = "job_cluster"
+    timeout_seconds = 3600
+  }
+
+  task {
+    task_key    = "bronze_sellers"
+    max_retries = 0
+    depends_on { task_key = "ingest_raw_orders" }
+    depends_on { task_key = "ingest_raw_customers" }
+    notebook_task {
+      notebook_path = "/Workspace/Repos/retailflow/databricks/notebooks/bronze/07_bronze_sellers"
+      source        = "WORKSPACE"
+    }
+    job_cluster_key = "job_cluster"
+    timeout_seconds = 3600
+  }
+
+  task {
+    task_key    = "bronze_geolocation"
+    max_retries = 0
+    depends_on { task_key = "ingest_raw_orders" }
+    depends_on { task_key = "ingest_raw_customers" }
+    notebook_task {
+      notebook_path = "/Workspace/Repos/retailflow/databricks/notebooks/bronze/08_bronze_geolocation"
+      source        = "WORKSPACE"
+    }
+    job_cluster_key = "job_cluster"
+    timeout_seconds = 3600
+  }
+
+  task {
     task_key    = "silver_orders"
     max_retries = 0
     depends_on { task_key = "bronze_orders" }

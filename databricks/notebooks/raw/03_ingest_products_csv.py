@@ -7,7 +7,7 @@
 # COMMAND ----------
 
 dbutils.widgets.text("source_csv_path", "", "Source CSV path (e.g. abfss://... or /mnt/...)")
-dbutils.widgets.text("raw_base_path", "abfss://raw@retailflowdevsa.dfs.core.windows.net/data/raw/products", "RAW base path")
+dbutils.widgets.text("raw_base_path", "abfss://raw@retailflowdevdls.dfs.core.windows.net/data/raw/products", "RAW base path")
 source_path = dbutils.widgets.get("source_csv_path")
 raw_base = dbutils.widgets.get("raw_base_path")
 

@@ -5,13 +5,14 @@ environment: dev
 databricks:
   workspace_url: https://adb-xxxx.azuredatabricks.net
   workspace_id: "123456789"
-# Storage: sample names for notebooks/jobs. Data Lake Terraform uses its own account (default dev: retailflowdevdls).
-# Postgres → RAW writes to RAW on that ADLS account; align base_path with terraform/adls outputs.
+# Storage: default dev account from terraform/adls (retailflowdevdls). Override per deployment.
+# Postgres → RAW writes to the RAW container on this account; Bronze reads the same base.
 storage:
-  account_name: retailflowdevsa
+  account_name: retailflowdevdls
   container_raw: raw
-  container_processed: processed
-  base_path: abfss://raw@retailflowdevsa.dfs.core.windows.net
+  # ADLS terraform default filesystems: raw, bronze, silver, gold (no separate "processed" container).
+  container_processed: bronze
+  base_path: abfss://raw@retailflowdevdls.dfs.core.windows.net
 catalog:
   name: retailflow_dev
   raw_schema: raw

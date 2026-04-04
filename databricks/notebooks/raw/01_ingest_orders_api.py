@@ -11,7 +11,7 @@
 
 # COMMAND ----------
 
-dbutils.widgets.text("raw_base_path", "abfss://raw@retailflowdevsa.dfs.core.windows.net/data/raw/orders", "RAW base path")
+dbutils.widgets.text("raw_base_path", "abfss://raw@retailflowdevdls.dfs.core.windows.net/data/raw/orders", "RAW base path")
 dbutils.widgets.text("orders_api_url", "", "Orders API base URL")
 dbutils.widgets.dropdown("use_secret_scope", "true", ["true", "false"], "Use Key Vault for API key")
 raw_base = dbutils.widgets.get("raw_base_path")

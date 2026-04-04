@@ -9,7 +9,7 @@ import dlt
 from pyspark.sql import functions as F
 
 # Config: set in pipeline settings
-raw_orders_path = spark.conf.get("retailflow.raw_orders_path", "abfss://raw@retailflowdevsa.dfs.core.windows.net/data/raw/orders")
+raw_orders_path = spark.conf.get("retailflow.raw_orders_path", "abfss://raw@retailflowdevdls.dfs.core.windows.net/data/raw/orders")
 catalog = spark.conf.get("retailflow.catalog", "retailflow_dev")
 
 # COMMAND ----------
@@ -23,7 +23,7 @@ def bronze_orders():
     return (
         spark.readStream.format("cloudFiles")
         .option("cloudFiles.format", "json")
-        .option("cloudFiles.schemaLocation", f"abfss://processed@retailflowdevsa.dfs.core.windows.net/schemas/bronze_orders")
+        .option("cloudFiles.schemaLocation", f"abfss://bronze@retailflowdevdls.dfs.core.windows.net/_schemas/dlt/bronze_orders")
         .load(f"{raw_orders_path}/ingestion_date=*")
         .withColumn("_ingestion_ts", F.current_timestamp())
         .withColumn("_source_file", F.input_file_name())
