@@ -17,7 +17,7 @@
 ## 3. RAW layer bootstrap
 
 - **Two conventions:** (1) **Postgres → RAW function** writes under **`postgres_ingest/{table}/...`** on the **Data Lake** storage account (from **`terraform/adls`**, default **`retailflowdevdls`**). No manual folders required for that flow; data appears after successful runs (check **`postgres_ingest/_runs`** for manifests). (2) **Notebooks / APIs** may use other prefixes (e.g. `data/raw/orders`, `customers`) — create those layouts as needed, or use Azure Portal, Azure CLI, and `scripts/bootstrap_raw_folders.sh` as reference.
-- **`config/environments/dev.yaml`:** `storage.account_name` / `base_path` may be placeholders; align with the account and filesystem you applied in **Terraform Data Lake** before pointing Bronze notebooks at `abfss://` paths.
+- **`config/environments/dev.yaml`:** Defaults `storage.account_name` / `base_path` to **`retailflowdevdls`** (dev ADLS from **Terraform Data Lake**). Change values if your deployment uses another account name or region-specific naming.
 
 ## 4. Config and cluster settings
 

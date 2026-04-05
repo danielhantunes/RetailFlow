@@ -44,7 +44,12 @@ RetailFlow/
 │       ├── bronze/
 │       │   ├── 01_bronze_orders.py
 │       │   ├── 02_bronze_customers.py
-│       │   └── 03_bronze_products.py
+│       │   ├── 03_bronze_products.py
+│       │   ├── 04_bronze_order_items.py
+│       │   ├── 05_bronze_order_payments.py
+│       │   ├── 06_bronze_order_reviews.py
+│       │   ├── 07_bronze_sellers.py
+│       │   └── 08_bronze_geolocation.py
 │       ├── silver/
 │       │   ├── 01_silver_orders.py
 │       │   ├── 02_silver_customers.py

@@ -18,7 +18,7 @@ RetailFlow/
 ├── databricks/
 │   ├── notebooks/
 │   │   ├── raw/               # Ingestion: orders, customers, products, inventory, clickstream
-│   │   ├── bronze/            # Schema enforcement, audit columns, Delta
+│   │   ├── bronze/            # RAW→Delta: orders, customers, products, order_items, payments, reviews, sellers, geolocation (see docs/REPOSITORY_TREE.md)
 │   │   ├── silver/            # Clean, dedup, validation
 │   │   ├── gold/              # fact_orders, fact_sales, dim_customer (SCD2), dim_product, dim_store, inventory_snapshot, daily_revenue_mart
 │   │   └── observability/     # Job monitoring, logging
@@ -141,7 +141,7 @@ Analytics marts  (Power BI, Tableau, reporting)
 - **Partitioning:** `ingestion_date=YYYY-MM-DD` (Postgres function also uses `hour=` and `batch_id=` in the path).
 - **Replay:** Reprocess any date range from RAW without changing RAW.
 - **Metadata:** Ingestion timestamp and source file captured in Bronze when reading RAW.
-- **Config sample:** `config/environments/dev.yaml` may use placeholder storage names (e.g. `retailflowdevsa`). **Postgres → RAW** and the **Data Lake Terraform** stack use the ADLS account from **`terraform/adls`** (default dev: **`retailflowdevdls`**). Point Databricks and `abfss://` paths at the account you actually deployed.
+- **Config sample:** `config/environments/dev.yaml` defaults **`storage.account_name`** / **`base_path`** to **`retailflowdevdls`**, matching **`terraform/adls`** for dev. Override if your storage account name differs. Point Databricks `abfss://` paths and Spark config (`retailflow.storage_account`, etc.) at the account you deployed.
 
 Details: [docs/RAW_LAYER_DESIGN.md](docs/RAW_LAYER_DESIGN.md).
 
@@ -155,7 +155,7 @@ See [databricks/notebooks/raw/01_ingest_orders_api.py](databricks/notebooks/raw/
 
 ## Example job config
 
-Main pipeline job **RetailFlow_Main_Pipeline** is defined and provisioned in Terraform: [terraform/databricks/databricks_resources.tf](terraform/databricks/databricks_resources.tf). Tasks: ingest RAW (orders, customers) → Bronze → Silver → Gold (fact_orders, dim_customer, daily_revenue_mart). Schedule: daily 02:00 UTC. Concurrency: 1. Cluster: LTS with Photon, Standard_D4as_v5, autoscale 1–2 workers, AQE and Delta optimize enabled (job cluster terminates after run). See [docs/COMPUTE_AND_COST.md](docs/COMPUTE_AND_COST.md) for DEV/PROD compute sizing and cost guidance.
+Main pipeline job **RetailFlow_Main_Pipeline** is defined and provisioned in Terraform: [terraform/databricks/databricks_resources.tf](terraform/databricks/databricks_resources.tf). Tasks: **ingest RAW** (orders + customers APIs) → **Bronze** (orders, customers, products, order_items, order_payments, order_reviews, sellers, geolocation; Postgres-backed Bronze tasks run after both RAW ingests) → **Silver** (orders, customers) → **Gold** (fact_orders, dim_customer, daily_revenue_mart). Schedule: daily 02:00 UTC. Concurrency: 1. Cluster: LTS with Photon, Standard_D4as_v5, autoscale 1–2 workers, AQE and Delta optimize enabled (job cluster terminates after run). See [docs/COMPUTE_AND_COST.md](docs/COMPUTE_AND_COST.md) for DEV/PROD compute sizing and cost guidance.
 
 ---
 
