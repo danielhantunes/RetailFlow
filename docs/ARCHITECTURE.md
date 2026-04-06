@@ -2,37 +2,28 @@
 
 ## Overview
 
-RetailFlow is an enterprise data platform for a retail company, built on **Azure Databricks** with a **medallion architecture** (RAW → BRONZE → SILVER → GOLD). **Target flow:** PostgreSQL (e.g. Olist) → **Azure Function** (timer) → ADLS RAW → Databricks Bronze → Silver → Snowflake Gold → dbt models → analytics marts. **VM toolbox** = one-time/ad-hoc loads and Postgres inspection only. Other sources (REST APIs, CSVs) ingested to RAW via notebooks. See [DATA_FLOW.md](DATA_FLOW.md).
+RetailFlow is an enterprise data platform for a retail company, built on **Azure Databricks** with a **medallion architecture** (RAW → BRONZE → SILVER → GOLD). **Source system (current):** **Azure PostgreSQL** (e.g. Olist on Azure Database for PostgreSQL Flexible Server) → **Azure Function** (timer) → ADLS RAW → Databricks Bronze → Silver → (target) Snowflake Gold → dbt models → analytics marts. **VM toolbox** = one-time/ad-hoc loads and Postgres inspection only. Optional sample notebooks can land REST/CSV data under other RAW prefixes; they are **not** the primary operational path. See [DATA_FLOW.md](DATA_FLOW.md).
 
 ## High-Level Architecture
 
-**Target flow:** PostgreSQL → **Azure Function** → ADLS RAW → Databricks Bronze/Silver → Snowflake Gold → dbt → Analytics marts.
+**Current flow:** PostgreSQL → **Azure Function** → ADLS RAW (`postgres_ingest/...`) → Databricks Bronze/Silver → Snowflake Gold → dbt → Analytics marts.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           SOURCE SYSTEMS                                          │
-├────────────────────┬─────────────┬─────────────┬─────────────┬─────────────┬───────┤
-│ PostgreSQL (Olist) │ REST APIs   │ SQL DB     │ JSON Logs   │ CSV         │ etc.  │
-│ (primary source)   │ (orders,    │ (extracts)  │ (clickstream)│ (products)  │       │
-│                    │  customers) │             │             │             │       │
-└─────────┬──────────┴──────┬──────┴──────┬──────┴──────┬──────┴──────┬─────┴───────┘
-          │                 │             │             │             │
-          ▼                 │             │             │             │
-┌─────────────────────────┐ │             │             │             │
-│ Azure Function          │ │             │             │             │
-│ (Postgres → RAW, timer)  │ │             │             │             │
-│ VM toolbox = ad-hoc only│ │             │             │             │
-└─────────┬───────────────┘ │             │             │             │
-          │                 ▼             ▼             ▼             ▼
-          │         ┌─────────────────────────────────────────────────────────────┐
-          │         │     INGESTION (Notebooks / ADF / Airflow for other sources) │
-          │         └─────────────────────────────────────────────────────────────┘
-          │                 │
-          └─────────────────┼─────────────────────────────────────────────────────┘
-                            ▼
+│  SOURCE SYSTEM (current)                                                         │
+│  Azure PostgreSQL  —  Olist / operational tables in the platform VNet               │
+└─────────────────────────────────────┬───────────────────────────────────────────┘
+                                        │
+                                        ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│  Azure Function (Postgres → RAW, timer + HTTP)  ·  VM toolbox = ad-hoc only       │
+└─────────────────────────────────────┬───────────────────────────────────────────┘
+                                        │
+          Optional: sample notebooks ───┼─── (REST/CSV demos → other RAW prefixes)
+                                        ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │  AZURE DATA LAKE STORAGE GEN2 (RAW) — Immutable, partition by ingestion_date     │
-│  /data/raw/orders | customers | products | order_items | clickstream | payments │
+│  Primary path: postgres_ingest/{table}/...  ·  Samples: data/raw/..., etc.      │
 └─────────────────────────────────────────────────────────────────────────────────┘
                             │
                             ▼
@@ -73,7 +64,7 @@ RetailFlow is an enterprise data platform for a retail company, built on **Azure
 - **Partitioning:** `ingestion_date=YYYY-MM-DD` (and optionally `source`, `batch_id`).
 - **Design:** No transformations; append-only; supports replay and schema evolution.
 - **Paths:**  
-  `/{container}/data/raw/orders/`, `customers/`, `products/`, `inventory/`, `clickstream/`, `payments/`
+  **Current (PostgreSQL):** `postgres_ingest/{table}/...` on the RAW filesystem. **Optional samples:** `data/raw/orders/`, `customers/`, etc., from API/CSV notebooks.
 
 ### BRONZE (Delta in Unity Catalog)
 

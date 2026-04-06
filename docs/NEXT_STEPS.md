@@ -16,7 +16,7 @@
 
 ## 3. RAW layer bootstrap
 
-- **Two conventions:** (1) **Postgres → RAW function** writes under **`postgres_ingest/{table}/...`** on the **Data Lake** storage account (from **`terraform/adls`**, default **`retailflowdevdls`**). No manual folders required for that flow; data appears after successful runs (check **`postgres_ingest/_runs`** for manifests). (2) **Notebooks / APIs** may use other prefixes (e.g. `data/raw/orders`, `customers`) — create those layouts as needed, or use Azure Portal, Azure CLI, and `scripts/bootstrap_raw_folders.sh` as reference.
+- **Source (current):** **PostgreSQL** → **Postgres → RAW function** writes under **`postgres_ingest/{table}/...`** on the **Data Lake** storage account (from **`terraform/adls`**, default **`retailflowdevdls`**). No manual folders required; data appears after successful runs (check **`postgres_ingest/_runs`** for manifests). **Optional:** sample **REST/CSV** notebooks may use other prefixes (e.g. `data/raw/orders`); create those layouts as needed, or use Azure Portal, Azure CLI, and `scripts/bootstrap_raw_folders.sh` as reference.
 - **`config/environments/dev.yaml`:** Defaults `storage.account_name` / `base_path` to **`retailflowdevdls`** (dev ADLS from **Terraform Data Lake**). Change values if your deployment uses another account name or region-specific naming.
 
 ## 4. Config and cluster settings
@@ -32,7 +32,7 @@
 - **Function runtime execution:** Recurring runs use **`POSTGRES_TIMER_SCHEDULE`** (default every 15 minutes). **Ad-hoc:** **Run Postgres RAW Initial Load** / **Incremental** set `INGESTION_MODE` and call **`/api/postgres_ingest_run`** with the host key (see module README).
 - **Resilience / restart behavior:** Postgres ingestion is chunked and checkpointed to ADLS (`_control/postgres_watermarks/<table>.json`). If a run is interrupted, rerunning continues from the last committed chunk cursor (`last_watermark` + `last_pk`). Run manifests are written under `postgres_ingest/_runs/...`.
 - **Mandatory when PostgreSQL is the source of origin:** Run **Provision PostgreSQL for Olist** before the ingest function. Recommended order: **Platform → Data Lake → Postgres → Postgres Ingest Function** (apply **Bootstrap VM** before runner steps if using the VM).
-- Run RAW ingestion notebooks (orders, customers, products, etc.) for other sources; validate files under RAW paths.
+- Optionally run RAW **sample** notebooks (orders, customers, products APIs/CSV) for non-Postgres demos; validate files under RAW paths. **Production** data for the default pipeline comes from **PostgreSQL → `postgres_ingest/`**.
 - Run Bronze notebooks/DLT to populate Bronze tables; then Silver, then Gold.
 - Run the main pipeline job (provisioned by Terraform in `terraform/databricks/databricks_resources.tf`; adjust notebook paths in Terraform if needed, e.g. Repos path).
 

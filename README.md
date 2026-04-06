@@ -1,6 +1,6 @@
 # RetailFlow — Enterprise Retail Data Platform
 
-Production-grade data platform for a retail company, built on **Azure Databricks** with a **medallion architecture** (RAW → BRONZE → SILVER → GOLD). Gold is served to **Snowflake** for BI (e.g. Power BI). Processes online orders, store sales, product catalog, inventory, customers, payments, and clickstream events for analytics, BI, and reporting. Orchestration: **Airflow**. Transformations and marts: **dbt**.
+Production-grade data platform for a retail company, built on **Azure Databricks** with a **medallion architecture** (RAW → BRONZE → SILVER → GOLD). **Source system (current):** **Azure PostgreSQL** (e.g. Olist) → **Azure Function** → ADLS RAW; downstream Bronze/Silver/Gold consume that path. Sample **REST/CSV** notebooks exist for demos and alternate layouts but are not the primary operational source. Gold is served to **Snowflake** for BI (e.g. Power BI). **Implemented:** Bronze for default Postgres tables, Silver for orders/customers, a **subset of Gold** in the main Terraform job (other Gold notebooks for extension). Orchestration: **Airflow** (optional; Databricks jobs are primary in CI). Transformations and marts: **dbt**.
 
 > 🚧 **This project is under active development and continuously evolving.** The current state already reflects production-oriented design decisions.
 
@@ -20,7 +20,7 @@ RetailFlow/
 │   │   ├── raw/               # Ingestion: orders, customers, products, inventory, clickstream
 │   │   ├── bronze/            # RAW→Delta: orders, customers, products, order_items, payments, reviews, sellers, geolocation (see docs/REPOSITORY_TREE.md)
 │   │   ├── silver/            # Clean, dedup, validation
-│   │   ├── gold/              # fact_orders, fact_sales, dim_customer (SCD2), dim_product, dim_store, inventory_snapshot, daily_revenue_mart
+│   │   ├── gold/              # fact/dim/mart notebooks; main job runs fact_orders, dim_customer, daily_revenue (see terraform/databricks/databricks_resources.tf)
 │   │   └── observability/     # Job monitoring, logging
 │   ├── jobs/                   # (job provisioned via Terraform: terraform/databricks/databricks_resources.tf)
 │   └── lib/                    # Shared utilities (see lib/README.md)
@@ -125,7 +125,7 @@ Analytics marts  (Power BI, Tableau, reporting)
 
 ## Data flow (detail)
 
-1. **Source → RAW:** **PostgreSQL** is the primary source; an **Azure Function** (timer + optional HTTP trigger) reads from Postgres and writes to ADLS RAW under **`postgres_ingest/`** (see [docs/DATA_FLOW.md](docs/DATA_FLOW.md)). The **VM toolbox** is for one-time/ad-hoc loads and inspection only. Other sources (REST APIs, CSVs) can be ingested by notebooks; paths may differ from the Postgres function prefix.
+1. **Source → RAW:** **PostgreSQL is the current source system** for scheduled ingestion: an **Azure Function** (timer + optional HTTP trigger) reads from Postgres and writes to ADLS RAW under **`postgres_ingest/`** (see [docs/DATA_FLOW.md](docs/DATA_FLOW.md)). The **VM toolbox** is for one-time/ad-hoc loads and inspection only. Optional sample notebooks (REST APIs, CSVs) can write other RAW prefixes for development; production paths follow **`postgres_ingest/`** from Postgres.
 2. **Bronze** notebooks/DLT read RAW → parse, add audit columns → Delta tables in Bronze schema.
 3. **Silver** reads Bronze → clean, dedupe, validate → Delta in Silver schema.
 4. **Gold** reads Silver → facts, dimensions, marts → Delta in Gold schema (dbt + notebooks). Gold is synced or exposed to **Snowflake**.
@@ -155,7 +155,7 @@ See [databricks/notebooks/raw/01_ingest_orders_api.py](databricks/notebooks/raw/
 
 ## Example job config
 
-Main pipeline job **RetailFlow_Main_Pipeline** is defined and provisioned in Terraform: [terraform/databricks/databricks_resources.tf](terraform/databricks/databricks_resources.tf). Tasks: **ingest RAW** (orders + customers APIs) → **Bronze** (orders, customers, products, order_items, order_payments, order_reviews, sellers, geolocation; Postgres-backed Bronze tasks run after both RAW ingests) → **Silver** (orders, customers) → **Gold** (fact_orders, dim_customer, daily_revenue_mart). Schedule: daily 02:00 UTC. Concurrency: 1. Cluster: LTS with Photon, Standard_D4as_v5, autoscale 1–2 workers, AQE and Delta optimize enabled (job cluster terminates after run). See [docs/COMPUTE_AND_COST.md](docs/COMPUTE_AND_COST.md) for DEV/PROD compute sizing and cost guidance.
+Main pipeline job **RetailFlow_Main_Pipeline** is defined and provisioned in Terraform: [terraform/databricks/databricks_resources.tf](terraform/databricks/databricks_resources.tf). Tasks: optional **RAW sample ingest** (orders + customers API notebooks) → **Bronze** (reads **`postgres_ingest/`** for orders, customers, products, order_items, order_payments, order_reviews, sellers, geolocation; Bronze tasks after both RAW ingests) → **Silver** (orders, customers) → **Gold** (fact_orders, dim_customer, daily_revenue_mart). **Operational data** is expected from **PostgreSQL → RAW**; API tasks are supplementary. Schedule: daily 02:00 UTC. Concurrency: 1. Cluster: LTS with Photon, Standard_D4as_v5, autoscale 1–2 workers, AQE and Delta optimize enabled (job cluster terminates after run). See [docs/COMPUTE_AND_COST.md](docs/COMPUTE_AND_COST.md) for DEV/PROD compute sizing and cost guidance.
 
 ---
 
