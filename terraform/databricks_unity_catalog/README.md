@@ -8,7 +8,7 @@ Creates a **Unity Catalog metastore** and **assigns** it to the dev workspace:
 
 **State:** `retailflow-dev-databricks-unity-catalog.tfstate`
 
-**CI:** [Terraform Databricks Workspace (Dev)](../../.github/workflows/terraform-databricks-workspace-dev.yml) — enable **Run Unity Catalog metastore** and set secret **`DATABRICKS_ACCOUNT_ID`**.
+**CI:** [Terraform Databricks Workspace (Dev)](../../.github/workflows/terraform-databricks-workspace-dev.yml) — Unity Catalog runs on every run; set secret **`DATABRICKS_ACCOUNT_ID`**.
 
 ## Prerequisites
 
