@@ -1,6 +1,6 @@
 # Databricks workspace (Azure) — dev only
 
-Creates **only** the **Azure Databricks workspace** (`retailflow-dev-dbw`, Standard SKU, VNet-injected) and optional **Contributor** role for the GitHub Actions service principal.
+Creates **only** the **Azure Databricks workspace** (`retailflow-dev-dbw`, Premium SKU, VNet-injected) and optional **Contributor** role for the GitHub Actions service principal.
 
 **State:** `retailflow-dev-databricks-workspace.tfstate`
 

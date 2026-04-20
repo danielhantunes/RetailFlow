@@ -41,7 +41,7 @@ resource "azurerm_databricks_workspace" "workspace" {
   name                = "retailflow-dev-dbw"
   resource_group_name = local.rg_name
   location            = local.location
-  sku                 = "standard"
+  sku                 = "premium"
 
   custom_parameters {
     no_public_ip        = true
