@@ -1,5 +1,12 @@
 # Unity Catalog Structure (RetailFlow)
 
+## Provisioning model in this repo
+
+- Databricks workspace is provisioned by `terraform/databricks_workspace` (Premium SKU).
+- Unity Catalog may be auto-enabled by Databricks account/workspace defaults when Premium is used.
+- The workspace GitHub workflow does not provision UC resources directly.
+- If you want full IaC control for metastore/data access/assignment, run `terraform/databricks_unity_catalog` separately.
+
 ## Catalogs and schemas
 
 | Environment | Catalog       | Schemas                          |

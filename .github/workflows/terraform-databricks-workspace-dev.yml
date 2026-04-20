@@ -1,9 +1,7 @@
 # Databricks workspace (Azure RM) — long-lived. VNet-injected Premium workspace + SP Contributor.
-# Unity Catalog metastore (terraform/databricks_unity_catalog) can be toggled via workflow input.
+# Unity Catalog metastore is managed separately from this workflow.
 # Run after Terraform Platform (Dev) and Terraform Data Lake (Dev). Run Terraform Databricks (Dev) after workspace for clusters + jobs.
-# State: retailflow-dev-databricks-workspace.tfstate + retailflow-dev-databricks-unity-catalog.tfstate
-#
-# Destroy order: Unity Catalog stack first, then workspace (workflow runs UC destroy before workspace destroy).
+# State: retailflow-dev-databricks-workspace.tfstate
 
 name: Terraform Databricks Workspace (Dev)
 on:
@@ -18,14 +16,6 @@ on:
           - apply
           - destroy
         default: plan
-      run_unity_catalog:
-        description: 'Run Unity Catalog stack (terraform/databricks_unity_catalog)'
-        required: true
-        type: choice
-        options:
-          - 'true'
-          - 'false'
-        default: 'true'
 
 permissions:
   id-token: write
@@ -45,13 +35,11 @@ env:
   TF_BACKEND_STORAGE_ACCOUNT: retailflowdevtfstate
   TF_BACKEND_CONTAINER: tfstate
   TF_BACKEND_KEY_WORKSPACE: retailflow-dev-databricks-workspace.tfstate
-  TF_BACKEND_KEY_UNITY_CATALOG: retailflow-dev-databricks-unity-catalog.tfstate
   TF_VAR_tfstate_resource_group_name: retailflow-dev-tfstate-rg
   TF_VAR_tfstate_storage_account_name: retailflowdevtfstate
   TF_VAR_tfstate_container_name: tfstate
   TF_VAR_tfstate_base_key: retailflow-dev-base.tfstate
   TF_VAR_azure_principal_id: ${{ secrets.AZURE_PRINCIPAL_ID }}
-  TF_VAR_databricks_account_id: ${{ secrets.DATABRICKS_ACCOUNT_ID }}
 
 jobs:
   terraform:
@@ -96,37 +84,6 @@ jobs:
       - name: Terraform Apply (Workspace)
         if: github.event.inputs.action == 'apply'
         run: terraform apply -auto-approve -no-color -input=false
-
-      # --- Unity Catalog stack (optional; destroy runs before workspace destroy below when enabled) ---
-      - name: Terraform Init (Unity Catalog)
-        if: github.event.inputs.run_unity_catalog == 'true' && (github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply' || github.event.inputs.action == 'destroy')
-        working-directory: terraform/databricks_unity_catalog
-        run: |
-          terraform init \
-            -backend-config="resource_group_name=$TF_BACKEND_RESOURCE_GROUP" \
-            -backend-config="storage_account_name=$TF_BACKEND_STORAGE_ACCOUNT" \
-            -backend-config="container_name=$TF_BACKEND_CONTAINER" \
-            -backend-config="key=$TF_BACKEND_KEY_UNITY_CATALOG"
-
-      - name: Terraform Validate (Unity Catalog)
-        if: github.event.inputs.run_unity_catalog == 'true' && (github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply')
-        working-directory: terraform/databricks_unity_catalog
-        run: terraform validate
-
-      - name: Terraform Plan (Unity Catalog)
-        if: github.event.inputs.run_unity_catalog == 'true' && (github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply')
-        working-directory: terraform/databricks_unity_catalog
-        run: terraform plan -no-color -input=false
-
-      - name: Terraform Apply (Unity Catalog)
-        if: github.event.inputs.run_unity_catalog == 'true' && github.event.inputs.action == 'apply'
-        working-directory: terraform/databricks_unity_catalog
-        run: terraform apply -auto-approve -no-color -input=false
-
-      - name: Terraform Destroy (Unity Catalog)
-        if: github.event.inputs.run_unity_catalog == 'true' && github.event.inputs.action == 'destroy'
-        working-directory: terraform/databricks_unity_catalog
-        run: terraform destroy -auto-approve -no-color -input=false
 
       - name: Terraform Destroy (Workspace)
         if: github.event.inputs.action == 'destroy'

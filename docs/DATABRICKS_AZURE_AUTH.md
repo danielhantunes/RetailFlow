@@ -1,6 +1,6 @@
 # Databricks authentication with Azure AD (Service Principal)
 
-**Terraform Databricks Workspace (Dev)** and **Terraform Databricks (Dev)** use the **same** Azure AD Service Principal you already use for Terraform (Azure RM), with **OIDC only** (no client secret). The Databricks Terraform provider uses **azure-cli** auth, so it uses the credential established by the `azure/login` step (OIDC). Access to the workspace is **automated via Terraform** in the workspace stack: Terraform grants **Contributor** on the workspace resource to the SP, and identities with Contributor or Owner on the workspace resource in Azure automatically get workspace admin permission when accessing Databricks (including the API). You do not need to add the app to the workspace manually, even when running apply/destroy frequently.
+**Terraform Databricks Workspace (Dev)** and **Terraform Databricks (Dev)** use the **same** Azure AD Service Principal you already use for Terraform (Azure RM), with **OIDC only** (no client secret). The Databricks Terraform provider uses **azure-cli** auth, so it uses the credential established by the `azure/login` step (OIDC). Access to the workspace is **automated via Terraform** in the workspace stack: Terraform grants **Contributor** on the workspace resource to the SP, and identities with Contributor or Owner on the workspace resource in Azure automatically get workspace admin permission when accessing Databricks (including the API). You do not need to add the app to the workspace manually, even when running apply/destroy frequently. The workspace workflow provisions workspace resources only; Unity Catalog is managed separately.
 
 ## Steps
 
@@ -47,6 +47,7 @@ The workflow passes `AZURE_PRINCIPAL_ID` as `TF_VAR_azure_principal_id`. If this
 
 - **Terraform Databricks Workspace (Dev):** One `apply` creates the workspace and the Contributor role assignment for the SP (when `AZURE_PRINCIPAL_ID` is set).
 - **Terraform Databricks (Dev):** One `apply` creates the dev cluster and main job; it loads workspace connection details from **remote state** (`retailflow-dev-databricks-workspace.tfstate` by default), not from a second apply.
+- **Unity Catalog:** not managed by `terraform-databricks-workspace-dev.yml`; configure in Databricks (or use `terraform/databricks_unity_catalog` separately if you want IaC for UC).
 - **Destroy compute only:** **Terraform Databricks (Dev)** `destroy` removes the job and clusters; notebooks and the workspace stay.
 - **Destroy workspace:** **Terraform Databricks Workspace (Dev)** `destroy` removes the workspace (and its role assignments); run **after** compute destroy or when you accept losing the workspace.
 

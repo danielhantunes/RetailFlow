@@ -8,7 +8,7 @@ Creates a **Unity Catalog metastore** and **assigns** it to the dev workspace:
 
 **State:** `retailflow-dev-databricks-unity-catalog.tfstate`
 
-**CI:** [Terraform Databricks Workspace (Dev)](../../.github/workflows/terraform-databricks-workspace-dev.yml) — Unity Catalog runs on every run; set secret **`DATABRICKS_ACCOUNT_ID`**.
+**CI:** Not executed by the workspace workflow anymore. Run this stack separately only if you want Terraform-managed UC resources.
 
 ## Prerequisites
 
@@ -20,8 +20,8 @@ Creates a **Unity Catalog metastore** and **assigns** it to the dev workspace:
 
 ## Order
 
-- **Apply:** after workspace (same workflow can run workspace then UC when the workflow input is enabled).
-- **Destroy:** run **Unity Catalog destroy** before destroying the workspace stack (this workflow destroys UC first when you choose **destroy** and UC is enabled).
+- **Apply:** after workspace.
+- **Destroy:** run **Unity Catalog destroy** before destroying the workspace stack when UC was created by this Terraform state.
 
 ## Local apply
 
