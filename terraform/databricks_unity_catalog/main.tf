@@ -67,8 +67,12 @@ locals {
   location = data.terraform_remote_state.base.outputs.location
 
   storage_account_name = data.terraform_remote_state.adls.outputs.storage_account_name
-  storage_account_id     = data.terraform_remote_state.adls.outputs.storage_account_id
+  storage_account_id   = data.terraform_remote_state.adls.outputs.storage_account_id
 
-  # Databricks control plane ID (not the Azure resource ID).
-  databricks_workspace_control_plane_id = data.terraform_remote_state.databricks_workspace.outputs.workspace_databricks_control_plane_id
+  # Databricks control plane ID (not the Azure resource ID). During first-time plan runs,
+  # the workspace state can exist without outputs yet; keep plan resilient in that case.
+  databricks_workspace_control_plane_id = try(
+    data.terraform_remote_state.databricks_workspace.outputs.workspace_databricks_control_plane_id,
+    null
+  )
 }

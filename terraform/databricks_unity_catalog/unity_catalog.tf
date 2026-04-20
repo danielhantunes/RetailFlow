@@ -46,6 +46,7 @@ resource "databricks_metastore_data_access" "this" {
 
 resource "databricks_metastore_assignment" "this" {
   provider = databricks.account
+  count    = local.databricks_workspace_control_plane_id != null ? 1 : 0
 
   workspace_id = local.databricks_workspace_control_plane_id
   metastore_id = databricks_metastore.this.id
