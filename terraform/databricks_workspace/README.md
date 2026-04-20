@@ -6,7 +6,7 @@ Creates **only** the **Azure Databricks workspace** (`retailflow-dev-dbw`, Premi
 
 **CI:** [Terraform Databricks Workspace (Dev)](../../.github/workflows/terraform-databricks-workspace-dev.yml)
 
-**Unity Catalog (always):** [terraform/databricks_unity_catalog](../databricks_unity_catalog/) — metastore + workspace assignment runs on every [Terraform Databricks Workspace (Dev)](../../.github/workflows/terraform-databricks-workspace-dev.yml) plan/apply/destroy. Set GitHub secret **`DATABRICKS_ACCOUNT_ID`**. Requires **Terraform Data Lake (Dev)** applied first. **Destroy** runs UC **before** workspace in that workflow.
+**Unity Catalog (optional):** [terraform/databricks_unity_catalog](../databricks_unity_catalog/) can be toggled in [Terraform Databricks Workspace (Dev)](../../.github/workflows/terraform-databricks-workspace-dev.yml) with input `run_unity_catalog` (`true` by default). Set GitHub secret **`DATABRICKS_ACCOUNT_ID`** when UC is enabled. Requires **Terraform Data Lake (Dev)** applied first. **Destroy** runs UC **before** workspace when UC is enabled in the run.
 
 **Order:** Run **after** [Terraform Platform (Dev)](../../.github/workflows/terraform-platform-dev.yml) and **Terraform Data Lake (Dev)** (for UC), **before** [Terraform Databricks (Dev)](../../.github/workflows/terraform-databricks-dev.yml) (compute: clusters + jobs).
 

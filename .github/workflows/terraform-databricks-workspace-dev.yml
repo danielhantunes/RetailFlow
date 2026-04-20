@@ -1,5 +1,5 @@
-# Databricks workspace (Azure RM) — long-lived. VNet-injected Standard workspace + SP Contributor.
-# Unity Catalog metastore (terraform/databricks_unity_catalog) runs with every plan/apply/destroy — metastore + workspace assignment.
+# Databricks workspace (Azure RM) — long-lived. VNet-injected Premium workspace + SP Contributor.
+# Unity Catalog metastore (terraform/databricks_unity_catalog) can be toggled via workflow input.
 # Run after Terraform Platform (Dev) and Terraform Data Lake (Dev). Run Terraform Databricks (Dev) after workspace for clusters + jobs.
 # State: retailflow-dev-databricks-workspace.tfstate + retailflow-dev-databricks-unity-catalog.tfstate
 #
@@ -18,6 +18,14 @@ on:
           - apply
           - destroy
         default: plan
+      run_unity_catalog:
+        description: 'Run Unity Catalog stack (terraform/databricks_unity_catalog)'
+        required: true
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+        default: 'true'
 
 permissions:
   id-token: write
@@ -89,9 +97,9 @@ jobs:
         if: github.event.inputs.action == 'apply'
         run: terraform apply -auto-approve -no-color -input=false
 
-      # --- Unity Catalog stack (always; destroy runs before workspace destroy below) ---
+      # --- Unity Catalog stack (optional; destroy runs before workspace destroy below when enabled) ---
       - name: Terraform Init (Unity Catalog)
-        if: github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply' || github.event.inputs.action == 'destroy'
+        if: github.event.inputs.run_unity_catalog == 'true' && (github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply' || github.event.inputs.action == 'destroy')
         working-directory: terraform/databricks_unity_catalog
         run: |
           terraform init \
@@ -101,22 +109,22 @@ jobs:
             -backend-config="key=$TF_BACKEND_KEY_UNITY_CATALOG"
 
       - name: Terraform Validate (Unity Catalog)
-        if: github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply'
+        if: github.event.inputs.run_unity_catalog == 'true' && (github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply')
         working-directory: terraform/databricks_unity_catalog
         run: terraform validate
 
       - name: Terraform Plan (Unity Catalog)
-        if: github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply'
+        if: github.event.inputs.run_unity_catalog == 'true' && (github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply')
         working-directory: terraform/databricks_unity_catalog
         run: terraform plan -no-color -input=false
 
       - name: Terraform Apply (Unity Catalog)
-        if: github.event.inputs.action == 'apply'
+        if: github.event.inputs.run_unity_catalog == 'true' && github.event.inputs.action == 'apply'
         working-directory: terraform/databricks_unity_catalog
         run: terraform apply -auto-approve -no-color -input=false
 
       - name: Terraform Destroy (Unity Catalog)
-        if: github.event.inputs.action == 'destroy'
+        if: github.event.inputs.run_unity_catalog == 'true' && github.event.inputs.action == 'destroy'
         working-directory: terraform/databricks_unity_catalog
         run: terraform destroy -auto-approve -no-color -input=false
 
